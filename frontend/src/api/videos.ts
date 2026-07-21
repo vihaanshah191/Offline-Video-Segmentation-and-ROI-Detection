@@ -4,7 +4,9 @@ import type {
   AnalyzeRequest,
   Clip,
   EventRecord,
+  GlobalStats,
   HeatmapInfo,
+  PageInfo,
   SystemInfo,
   Timeline,
   Video,
@@ -18,12 +20,35 @@ export interface EventQuery {
   min_score?: number;
   sort_by?: "start_time" | "duration" | "motion_score" | "confidence";
   order?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+}
+
+export interface VideoListQuery {
+  limit?: number;
+  offset?: number;
+}
+
+/** A paginated result: items plus metadata parsed from the response headers. */
+export interface Page<T> {
+  items: T[];
+  pageInfo: PageInfo;
+}
+
+function extractPageInfo(headers: Record<string, unknown>, fallbackLimit: number): PageInfo {
+  const total = Number(headers["x-total-count"] ?? 0);
+  const limit = Number(headers["x-limit"] ?? fallbackLimit);
+  const offset = Number(headers["x-offset"] ?? 0);
+  return { total, limit, offset };
 }
 
 export const videosApi = {
-  async list(): Promise<Video[]> {
-    const { data } = await apiClient.get<Video[]>("/videos");
-    return data;
+  async list(query: VideoListQuery = {}): Promise<Page<Video>> {
+    const limit = query.limit ?? 100;
+    const { data, headers } = await apiClient.get<Video[]>("/videos", {
+      params: { limit, offset: query.offset ?? 0 },
+    });
+    return { items: data, pageInfo: extractPageInfo(headers, limit) };
   },
 
   async get(id: number): Promise<VideoDetail> {
@@ -52,9 +77,12 @@ export const videosApi = {
     await apiClient.delete(`/video/${id}`);
   },
 
-  async events(id: number, query: EventQuery = {}): Promise<EventRecord[]> {
-    const { data } = await apiClient.get<EventRecord[]>(`/events/${id}`, { params: query });
-    return data;
+  async events(id: number, query: EventQuery = {}): Promise<Page<EventRecord>> {
+    const limit = query.limit ?? 200;
+    const { data, headers } = await apiClient.get<EventRecord[]>(`/events/${id}`, {
+      params: { ...query, limit },
+    });
+    return { items: data, pageInfo: extractPageInfo(headers, limit) };
   },
 
   async clips(id: number): Promise<Clip[]> {
@@ -79,6 +107,11 @@ export const videosApi = {
 
   async system(): Promise<SystemInfo> {
     const { data } = await apiClient.get<SystemInfo>("/system");
+    return data;
+  },
+
+  async globalStats(): Promise<GlobalStats> {
+    const { data } = await apiClient.get<GlobalStats>("/stats");
     return data;
   },
 

@@ -15,12 +15,13 @@ import pytest
 
 # ---- Configure an isolated environment BEFORE importing the app -----------
 _TMP = Path(tempfile.mkdtemp(prefix="video-analytics-test-"))
-for name in ("storage", "videos", "clips", "heatmaps", "thumbnails", "reports"):
+for name in ("storage", "videos", "clips", "heatmaps", "thumbnails", "reports", "data"):
     (_TMP / name).mkdir(parents=True, exist_ok=True)
 
 os.environ.update(
     {
         "DATABASE_URL": f"sqlite:///{_TMP / 'test.db'}",
+        "DATA_DIR": str(_TMP / "data"),
         "STORAGE_DIR": str(_TMP / "storage"),
         "VIDEOS_DIR": str(_TMP / "videos"),
         "CLIPS_DIR": str(_TMP / "clips"),
@@ -29,6 +30,11 @@ os.environ.update(
         "REPORTS_DIR": str(_TMP / "reports"),
         "ENABLE_OBJECT_DETECTION": "false",
         "FRAME_SAMPLE_STEP": "1",
+        # Rate limiting is tested in isolation (test_rate_limit.py) against a
+        # dedicated middleware instance with injected limits; disabling it
+        # globally here keeps the rest of the suite free of order-dependent
+        # flakiness (e.g. many uploads across many tests within one minute).
+        "RATE_LIMIT_ENABLED": "false",
     }
 )
 
@@ -81,4 +87,12 @@ def sample_video_path() -> Path:
             cv2.rectangle(frame, (cx - 25, 90), (cx + 25, 170), (0, 150, 255), -1)
         writer.write(frame)
     writer.release()
+    return path
+
+
+@pytest.fixture(scope="session")
+def not_a_video_path() -> Path:
+    """A file with a video extension but non-video content (magic-byte tests)."""
+    path = _TMP / "fake.mp4"
+    path.write_bytes(b"This is definitely not a video file, just plain text bytes.")
     return path

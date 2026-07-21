@@ -5,12 +5,13 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 
-import { videosApi, type EventQuery } from "@/api/videos";
+import { videosApi, type EventQuery, type Page, type VideoListQuery } from "@/api/videos";
 import type {
   Analytics,
   AnalyzeRequest,
   Clip,
   EventRecord,
+  GlobalStats,
   HeatmapInfo,
   SystemInfo,
   Timeline,
@@ -19,7 +20,7 @@ import type {
 } from "@/types";
 
 export const queryKeys = {
-  videos: ["videos"] as const,
+  videos: (q: VideoListQuery = {}) => ["videos", q] as const,
   video: (id: number) => ["video", id] as const,
   events: (id: number, q: EventQuery) => ["events", id, q] as const,
   clips: (id: number) => ["clips", id] as const,
@@ -27,17 +28,18 @@ export const queryKeys = {
   analytics: (id: number) => ["analytics", id] as const,
   heatmap: (id: number) => ["heatmap", id] as const,
   system: ["system"] as const,
+  globalStats: ["globalStats"] as const,
 };
 
 const ACTIVE = new Set(["queued", "processing"]);
 
-export function useVideos(): UseQueryResult<Video[]> {
+export function useVideos(query: VideoListQuery = {}): UseQueryResult<Page<Video>> {
   return useQuery({
-    queryKey: queryKeys.videos,
-    queryFn: videosApi.list,
-    // Refetch while any video is still processing.
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((v) => ACTIVE.has(v.status)) ? 2000 : false,
+    queryKey: queryKeys.videos(query),
+    queryFn: () => videosApi.list(query),
+    // Refetch while any video on the current page is still processing.
+    refetchInterval: (q) =>
+      (q.state.data?.items ?? []).some((v) => ACTIVE.has(v.status)) ? 2000 : false,
   });
 }
 
@@ -53,7 +55,19 @@ export function useSystemInfo(): UseQueryResult<SystemInfo> {
   return useQuery({ queryKey: queryKeys.system, queryFn: videosApi.system, staleTime: 60_000 });
 }
 
-export function useEvents(id: number, query: EventQuery, enabled = true): UseQueryResult<EventRecord[]> {
+export function useGlobalStats(): UseQueryResult<GlobalStats> {
+  return useQuery({
+    queryKey: queryKeys.globalStats,
+    queryFn: videosApi.globalStats,
+    refetchInterval: 5000,
+  });
+}
+
+export function useEvents(
+  id: number,
+  query: EventQuery,
+  enabled = true,
+): UseQueryResult<Page<EventRecord>> {
   return useQuery({
     queryKey: queryKeys.events(id, query),
     queryFn: () => videosApi.events(id, query),
@@ -82,7 +96,10 @@ export function useUploadVideo() {
   return useMutation({
     mutationFn: ({ file, onProgress }: { file: File; onProgress?: (p: number) => void }) =>
       videosApi.upload(file, onProgress),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.videos }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      qc.invalidateQueries({ queryKey: queryKeys.globalStats });
+    },
   });
 }
 
@@ -92,7 +109,8 @@ export function useAnalyzeVideo(id: number) {
     mutationFn: (req: AnalyzeRequest) => videosApi.analyze(id, req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.video(id) });
-      qc.invalidateQueries({ queryKey: queryKeys.videos });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      qc.invalidateQueries({ queryKey: queryKeys.globalStats });
     },
   });
 }
@@ -101,6 +119,9 @@ export function useDeleteVideo() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => videosApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.videos }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      qc.invalidateQueries({ queryKey: queryKeys.globalStats });
+    },
   });
 }

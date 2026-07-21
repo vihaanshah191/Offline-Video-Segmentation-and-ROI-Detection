@@ -53,13 +53,28 @@ def run_analysis(video_id: int, config: PipelineConfig) -> None:
 
     except Exception as exc:  # noqa: BLE001 - record and swallow
         logger.exception("Analysis failed for video %s", video_id)
-        db.rollback()
-        video = db.get(Video, video_id)
-        if video is not None:
-            video.status = VideoStatus.FAILED
-            video.status_message = "Analysis failed"
-            video.error = str(exc)
-            db.commit()
+        try:
+            db.rollback()
+            video = db.get(Video, video_id)
+            if video is not None:
+                video.status = VideoStatus.FAILED
+                video.status_message = "Analysis failed"
+                # Truncate defensively: an unexpected exception's message could
+                # in principle be very large (e.g. a library dumping a huge
+                # buffer into its message); the column has a practical limit
+                # and an oversized value should never itself cause a second
+                # failure while we're already in the process of recording one.
+                video.error = str(exc)[:4000]
+                db.commit()
+        except Exception:  # noqa: BLE001 - never let error *reporting* itself crash the thread
+            # If the database is unreachable even for this final write, there
+            # is nothing more we can do from a background thread — a raised
+            # exception here would only be printed to stderr and the thread
+            # would die silently with no other record of what happened, so we
+            # log with full context instead and return cleanly.
+            logger.exception(
+                "Failed to persist FAILED status for video %s after analysis error", video_id
+            )
     finally:
         db.close()
 

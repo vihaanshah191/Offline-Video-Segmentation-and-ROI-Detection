@@ -1,19 +1,18 @@
-import { Cpu, HardDrive, Video as VideoIcon, Zap } from "lucide-react";
+import { AlertTriangle, Cpu, HardDrive, Video as VideoIcon, Zap } from "lucide-react";
 
 import { StatCard } from "@/components/StatCard";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoUpload } from "@/components/VideoUpload";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSystemInfo, useVideos } from "@/hooks/useVideos";
-import { formatBytes } from "@/lib/utils";
+import { useGlobalStats, useSystemInfo, useVideos } from "@/hooks/useVideos";
+import { formatBytes, formatDuration } from "@/lib/utils";
 
 export function DashboardPage() {
-  const { data: videos = [], isLoading } = useVideos();
+  const { data: videoPage, isLoading } = useVideos({ limit: 100 });
   const { data: system } = useSystemInfo();
-
-  const completed = videos.filter((v) => v.status === "completed").length;
-  const processing = videos.filter((v) => v.status === "processing" || v.status === "queued").length;
+  const { data: stats } = useGlobalStats();
+  const videos = videoPage?.items ?? [];
 
   return (
     <div className="space-y-8">
@@ -24,10 +23,20 @@ export function DashboardPage() {
         </p>
       </section>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Videos" value={videos.length} icon={VideoIcon} accent="primary" />
-        <StatCard label="Analyzed" value={completed} icon={Zap} accent="emerald" />
-        <StatCard label="Processing" value={processing} icon={Cpu} accent="amber" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard label="Videos" value={stats?.total_videos ?? videos.length} icon={VideoIcon} accent="primary" />
+        <StatCard label="Analyzed" value={stats?.completed_videos ?? 0} icon={Zap} accent="emerald" />
+        <StatCard label="Processing" value={stats?.processing_videos ?? 0} icon={Cpu} accent="amber" />
+        {stats && stats.failed_videos > 0 ? (
+          <StatCard label="Failed" value={stats.failed_videos} icon={AlertTriangle} accent="rose" />
+        ) : (
+          <StatCard
+            label="Total footage"
+            value={stats ? formatDuration(stats.total_video_duration_seconds) : "—"}
+            icon={VideoIcon}
+            accent="violet"
+          />
+        )}
         <StatCard
           label="Free storage"
           value={system ? formatBytes(system.free_disk_bytes) : "—"}

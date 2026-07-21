@@ -1,7 +1,7 @@
 """Event, ROI and Detection Pydantic schemas."""
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ROIRead(BaseModel):
@@ -27,6 +27,14 @@ class DetectionRead(BaseModel):
     confidence: float
     timestamp: float
     prohibited: bool
+    heuristic: bool = Field(
+        default=False,
+        description=(
+            "True when this label is a heuristic proxy for a prohibited concept "
+            "the detection model has no direct class for (e.g. 'book' standing in "
+            "for 'possible notes'), not a direct, reliable detection."
+        ),
+    )
     x: int
     y: int
     w: int

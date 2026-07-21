@@ -12,6 +12,7 @@ from app.schemas.event import (
 )
 from app.schemas.video import (
     AnalyzeRequest,
+    GlobalStats,
     MessageResponse,
     VideoDetail,
     VideoRead,
@@ -21,6 +22,7 @@ __all__ = [
     "AnalyzeRequest",
     "DetectionRead",
     "EventRead",
+    "GlobalStats",
     "HeatmapResponse",
     "MessageResponse",
     "ROIRead",

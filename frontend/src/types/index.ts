@@ -8,7 +8,7 @@ export type VideoStatus =
   | "completed"
   | "failed";
 
-export type MotionAlgorithm = "mog2" | "frame_diff" | "optical_flow";
+export type MotionAlgorithm = "mog2" | "frame_diff" | "optical_flow" | "auto";
 
 export interface Video {
   id: number;
@@ -29,11 +29,26 @@ export interface Video {
   analyzed_at: string | null;
 }
 
+export interface ProcessingStats {
+  events: number;
+  samples: number;
+  frames_processed: number;
+  frames_with_errors: number;
+  object_detection: boolean;
+  resolved_motion_algorithm: string;
+  motion_detection_seconds: number;
+  motion_detection_throughput_fps: number;
+  total_pipeline_seconds: number;
+  object_detection_cache_hits: number;
+  object_detection_cache_misses: number;
+}
+
 export interface VideoDetail extends Video {
   heatmap_path: string | null;
   thumbnail_path: string | null;
   error: string | null;
   event_count: number;
+  processing_stats: ProcessingStats | null;
 }
 
 export interface ROI {
@@ -51,6 +66,10 @@ export interface Detection {
   confidence: number;
   timestamp: number;
   prohibited: boolean;
+  /** True when `label` is only a heuristic proxy for a prohibited concept
+   * the detector has no direct class for (e.g. "book" standing in for
+   * "possible notes"), not a direct, reliable detection. */
+  heuristic: boolean;
   x: number;
   y: number;
   w: number;
@@ -152,4 +171,23 @@ export interface SystemInfo {
   default_motion_algorithm: string;
   free_disk_bytes: number;
   allowed_extensions: string[];
+}
+
+export interface GlobalStats {
+  total_videos: number;
+  completed_videos: number;
+  processing_videos: number;
+  failed_videos: number;
+  total_events: number;
+  total_video_duration_seconds: number;
+  free_disk_bytes: number;
+}
+
+/** Pagination metadata carried in X-Total-Count / X-Limit / X-Offset
+ * response headers (additive, non-breaking — the JSON body stays a plain
+ * array). See docs/API.md. */
+export interface PageInfo {
+  total: number;
+  limit: number;
+  offset: number;
 }

@@ -1,9 +1,10 @@
 """Video-related Pydantic schemas."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.video import VideoStatus
 
@@ -42,6 +43,30 @@ class VideoDetail(VideoRead):
     thumbnail_path: str | None = None
     error: str | None = None
     event_count: int = 0
+    processing_stats: dict | None = Field(
+        default=None,
+        description=(
+            "Performance/processing statistics from the most recent analysis run "
+            "(frame throughput, resolved motion algorithm, cache hit rate, ...)."
+        ),
+    )
+
+    @field_validator("processing_stats", mode="before")
+    @classmethod
+    def _parse_processing_stats(cls, value: object) -> dict | None:
+        """Transparently parse the JSON-text ORM column into a dict.
+
+        ``Video.processing_stats`` is stored as a JSON-encoded string (see
+        ``app/models/video.py`` for the SQLite/Postgres-portability rationale),
+        so ``model_validate(video)`` would otherwise fail validation trying to
+        assign a ``str`` to this ``dict | None`` field.
+        """
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return None
+        return value
 
 
 class AnalyzeRequest(BaseModel):
@@ -49,17 +74,33 @@ class AnalyzeRequest(BaseModel):
 
     motion_algorithm: str = Field(
         default="mog2",
-        description="Motion algorithm: 'mog2', 'frame_diff' or 'optical_flow'.",
+        description=(
+            "Motion algorithm: 'mog2', 'frame_diff', 'optical_flow', or 'auto' to "
+            "let the pipeline pre-scan the video and pick the best fit automatically."
+        ),
+        examples=["mog2", "auto"],
     )
     enable_object_detection: bool = Field(
-        default=True, description="Run YOLO object detection on motion frames."
+        default=True, description="Run YOLO object detection on motion-segment frames."
     )
     frame_sample_step: int | None = Field(
-        default=None, ge=1, le=30, description="Process every Nth frame."
+        default=None, ge=1, le=60, description="Process every Nth frame (higher = faster, coarser)."
     )
     min_motion_area: int | None = Field(
         default=None, ge=1, description="Minimum contour area (px) counted as motion."
     )
+
+
+class GlobalStats(BaseModel):
+    """Aggregate counts across every uploaded video, for the dashboard overview."""
+
+    total_videos: int
+    completed_videos: int
+    processing_videos: int
+    failed_videos: int
+    total_events: int
+    total_video_duration_seconds: float
+    free_disk_bytes: int
 
 
 class MessageResponse(BaseModel):

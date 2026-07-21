@@ -1,22 +1,28 @@
 """FastAPI application factory and entry point.
 
 Wires together configuration, logging, the database, static file serving for
-generated artefacts, CORS and the API router.
+generated artefacts, CORS, rate limiting, global error handling and the API
+router.
 """
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import api_router
 from app.core.config import settings
 from app.core.logging_config import configure_logging, get_logger
+from app.core.rate_limit import RateLimitMiddleware
 from app.database.session import init_db
+from app.services.video_service import VideoValidationError
 
-configure_logging(settings.log_level)
+configure_logging(settings.log_level, log_format=settings.log_format)
 logger = get_logger(__name__)
 
 
@@ -37,24 +43,88 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         description=(
             "Offline video analytics: motion detection, ROI detection, "
-            "segmentation, object detection, heatmaps, timelines and event logs."
+            "segmentation, object detection, heatmaps, timelines and event logs.\n\n"
+            "All processing runs asynchronously in the background after "
+            "`POST /analyze/{id}`; poll `GET /video/{id}` for progress."
         ),
         lifespan=lifespan,
+        contact={"name": "Offline Video Analytics"},
+        license_info={"name": "MIT"},
     )
 
+    # Explicit method/header allow-lists rather than "*" — the frontend only
+    # ever needs GET/POST/DELETE/OPTIONS and a Content-Type header, so there is
+    # no reason to widen the CORS surface further.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials="*" not in settings.cors_origin_list,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept"],
+        expose_headers=["X-Total-Count", "X-Limit", "X-Offset", "X-Process-Time"],
     )
 
-    # Serve generated artefacts (heatmaps, clips, thumbnails) statically.
+    if settings.rate_limit_enabled:
+        app.add_middleware(RateLimitMiddleware)
+
+    @app.middleware("http")
+    async def add_process_time_header(request: Request, call_next):
+        """Time every request and log slow ones; exposes X-Process-Time."""
+        start = time.perf_counter()
+        response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Process-Time"] = f"{elapsed_ms:.2f}ms"
+        if elapsed_ms > 1000:
+            logger.warning(
+                "Slow request: %s %s took %.0fms", request.method, request.url.path, elapsed_ms
+            )
+        return response
+
     settings.ensure_directories()
-    app.mount("/storage", StaticFiles(directory=str(settings.storage_dir)), name="storage")
+
+    # Mount ONLY the specific public artefact subdirectories — never the whole
+    # ``storage_dir`` root. This is a deliberate security boundary: the SQLite
+    # database and any future non-public files must never be reachable over
+    # HTTP even if a future change accidentally colocates them under storage.
+    for name, directory in (
+        ("videos", settings.videos_dir),
+        ("clips", settings.clips_dir),
+        ("heatmaps", settings.heatmaps_dir),
+        ("thumbnails", settings.thumbnails_dir),
+    ):
+        app.mount(f"/storage/{name}", StaticFiles(directory=str(directory)), name=f"storage-{name}")
 
     app.include_router(api_router, prefix=settings.api_prefix)
+
+    @app.exception_handler(VideoValidationError)
+    async def handle_video_validation_error(request: Request, exc: VideoValidationError):
+        """Centralised handling for upload/validation errors raised by services."""
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": str(exc), "error_type": "validation_error"},
+        )
+
+    @app.exception_handler(SQLAlchemyError)
+    async def handle_database_error(request: Request, exc: SQLAlchemyError):
+        """Never leak raw SQL/driver internals; log full detail server-side."""
+        logger.exception("Database error handling %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": "The database is temporarily unavailable. Please retry.",
+                "error_type": "database_error",
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception):
+        """Catch-all: never let an unhandled exception crash the ASGI worker
+        or leak a stack trace to the client."""
+        logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "An unexpected error occurred.", "error_type": "internal_error"},
+        )
 
     @app.get("/", tags=["system"])
     def root() -> dict:

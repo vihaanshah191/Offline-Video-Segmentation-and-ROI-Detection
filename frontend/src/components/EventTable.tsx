@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpDown, Download, Search, ShieldAlert } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, Download, HelpCircle, Search, ShieldAlert } from "lucide-react";
 
 import { videosApi, type EventQuery } from "@/api/videos";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { useEvents } from "@/hooks/useVideos";
 import { cn, formatDuration, formatTimestamp } from "@/lib/utils";
 
 type SortField = NonNullable<EventQuery["sort_by"]>;
+const PAGE_SIZE = 25;
 
 interface Props {
   videoId: number;
@@ -29,16 +30,23 @@ export function EventTable({ videoId, onSeek }: Props) {
   const [prohibitedOnly, setProhibitedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortField>("start_time");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(0);
 
   const query: EventQuery = {
     search: search || undefined,
     prohibited_only: prohibitedOnly,
     sort_by: sortBy,
     order,
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
   };
-  const { data: events = [], isLoading } = useEvents(videoId, query);
+  const { data, isLoading } = useEvents(videoId, query);
+  const events = data?.items ?? [];
+  const total = data?.pageInfo.total ?? 0;
+  const hasNextPage = (page + 1) * PAGE_SIZE < total;
 
   const toggleSort = (field: SortField) => {
+    setPage(0);
     if (sortBy === field) {
       setOrder((o) => (o === "asc" ? "desc" : "asc"));
     } else {
@@ -51,7 +59,7 @@ export function EventTable({ videoId, onSeek }: Props) {
     <Card>
       <CardHeader className="gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-base">Event log</CardTitle>
+          <CardTitle className="text-base">Event log{total > 0 ? ` (${total})` : ""}</CardTitle>
           <Button asChild size="sm" variant="outline">
             <a href={videosApi.csvUrl(videoId)} download>
               <Download className="h-4 w-4" />
@@ -63,16 +71,22 @@ export function EventTable({ videoId, onSeek }: Props) {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by object (phone, paper, person…)"
+              placeholder="Search by object (phone, book, person…)"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
               className="pl-8"
             />
           </div>
           <Button
             variant={prohibitedOnly ? "destructive" : "outline"}
             size="sm"
-            onClick={() => setProhibitedOnly((p) => !p)}
+            onClick={() => {
+              setProhibitedOnly((p) => !p);
+              setPage(0);
+            }}
           >
             <ShieldAlert className="h-4 w-4" />
             Prohibited only
@@ -108,7 +122,12 @@ export function EventTable({ videoId, onSeek }: Props) {
             ) : (
               events.map((event) => {
                 const objects = event.objects.split(",").filter(Boolean);
-                const hasProhibited = event.detections.some((d) => d.prohibited);
+                const heuristicLabels = new Set(
+                  event.detections.filter((d) => d.heuristic).map((d) => d.label),
+                );
+                const prohibitedLabels = new Set(
+                  event.detections.filter((d) => d.prohibited).map((d) => d.label),
+                );
                 return (
                   <TableRow
                     key={event.id}
@@ -130,9 +149,18 @@ export function EventTable({ videoId, onSeek }: Props) {
                           objects.map((o) => (
                             <Badge
                               key={o}
-                              variant={hasProhibited && ["phone", "paper", "book"].includes(o) ? "destructive" : "secondary"}
+                              variant={prohibitedLabels.has(o) ? "destructive" : "secondary"}
+                              className="gap-1"
+                              title={
+                                heuristicLabels.has(o)
+                                  ? "Heuristic signal: this model has no direct class for the " +
+                                    "underlying concept and is using a related, imperfect proxy. " +
+                                    "Treat as a hint, not confirmation."
+                                  : undefined
+                              }
                             >
                               {o}
+                              {heuristicLabels.has(o) && <HelpCircle className="h-3 w-3 opacity-70" />}
                             </Badge>
                           ))
                         )}
@@ -145,6 +173,24 @@ export function EventTable({ videoId, onSeek }: Props) {
             )}
           </TableBody>
         </Table>
+
+        {total > PAGE_SIZE ? (
+          <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" disabled={!hasNextPage} onClick={() => setPage((p) => p + 1)}>
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -178,7 +224,7 @@ function SortHead({
 }
 
 function MotionBar({ value }: { value: number }) {
-  const pct = Math.min(100, value * 100 * 8); // scaled for visibility
+  const pct = Math.min(100, value * 100);
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">

@@ -3,29 +3,42 @@
 Orchestrates the full flow for a single uploaded video:
 
     Extract frames -> Motion detection -> Noise filtering -> ROI detection
-    -> Object detection (YOLO) -> Merge events -> Generate clips -> Heatmap
-    -> Timeline data -> Persist to database.
+    -> Object detection (YOLO, batched) -> Merge events (smoothing +
+    hysteresis) -> Generate clips -> Heatmap -> Timeline data -> Persist.
 
-The pipeline is deliberately single-pass for the heavy motion analysis (one
-decode of the video) and performs a light second pass that only seeks to a few
-representative frames per segment for object detection, clip cutting and
-thumbnails — keeping it viable for multi-hour 1080p recordings.
+Two concurrency/performance techniques keep this viable for multi-hour 1080p
+recordings:
+
+* A background **frame-reader thread** decodes frames and pushes only the
+  sampled ones onto a bounded queue, overlapping video decode I/O with CV
+  processing in the main thread (OpenCV's C++ core releases the GIL for both,
+  so this achieves genuine wall-clock overlap despite the interpreter's GIL).
+  The queue is bounded (``frame_buffer_size``), so memory use cannot grow
+  unbounded if processing falls behind decoding.
+* The heavy motion-analysis pass decodes the video exactly once. A light
+  second pass only random-seeks a handful of representative frames per
+  detected segment for object detection, clip cutting and thumbnails.
 """
 from __future__ import annotations
 
+import json
+import queue
+import threading
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import cv2
+import numpy as np
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.config import settings as global_settings
-from app.core.logging_config import get_logger
+from app.core.logging_config import LogTimer, get_logger
 from app.models.video import ROI, Detection, Event, Video, VideoStatus
 from app.services.heatmap import HeatmapAccumulator
-from app.services.motion_detection import MotionDetector
+from app.services.motion_detection import AUTO, MotionDetector, select_best_algorithm
 from app.services.object_detection import ObjectDetection, ObjectDetector
 from app.services.roi_detection import ROIDetector
 from app.services.segmentation import MotionSample, Segment, build_segments
@@ -36,6 +49,12 @@ logger = get_logger(__name__)
 
 ProgressCallback = Callable[[float, str], None]
 
+# If more than this many CONSECUTIVE frames fail to decode/process, the video
+# is treated as genuinely corrupt/unsupported (rather than having a handful of
+# glitchy frames from a marginal codec) and analysis aborts with a clear error
+# instead of silently producing a near-empty, misleading result.
+MAX_CONSECUTIVE_FRAME_ERRORS = 30
+
 
 @dataclass(slots=True)
 class FrameSample:
@@ -44,7 +63,7 @@ class FrameSample:
     time: float
     frame_index: int
     score: float
-    active: bool
+    roi_present: bool
     rois: list[Box] = field(default_factory=list)
 
 
@@ -60,6 +79,12 @@ class PipelineConfig:
     min_segment_duration_sec: float
     roi_merge_iou: float
     enable_object_detection: bool
+    motion_hysteresis_ratio: float = 0.6
+    motion_smoothing_window: int = 5
+    roi_min_area_fraction: float = 0.0
+    roi_max_raw_contours: int = 200
+    adaptive_threshold: bool = True
+    frame_buffer_size: int = 64
 
     @classmethod
     def from_settings(cls, s: Settings, **overrides) -> PipelineConfig:
@@ -72,11 +97,82 @@ class PipelineConfig:
             min_segment_duration_sec=s.min_segment_duration_sec,
             roi_merge_iou=s.roi_merge_iou,
             enable_object_detection=s.enable_object_detection,
+            motion_hysteresis_ratio=s.motion_hysteresis_ratio,
+            motion_smoothing_window=s.motion_smoothing_window,
+            roi_min_area_fraction=s.roi_min_area_fraction,
+            roi_max_raw_contours=s.roi_max_raw_contours,
+            frame_buffer_size=s.frame_buffer_size,
         )
         for key, value in overrides.items():
             if value is not None and hasattr(base, key):
                 setattr(base, key, value)
         return base
+
+
+class _FrameReaderThread:
+    """Decodes video frames on a background thread, feeding a bounded queue.
+
+    Only frames matching the sample step are enqueued (skipped frames are
+    still decoded — OpenCV does not support cheap frame-skipping for most
+    compressed codecs — but are discarded immediately without leaving the
+    reader thread, so the consumer never pays Python-level overhead for them).
+
+    The queue bound (``queue_size``) caps memory growth if the consumer (CV
+    processing) falls behind the producer (decode), which is the concrete
+    safeguard against unbounded memory use on very long recordings.
+    """
+
+    _SENTINEL = object()
+
+    def __init__(self, video_path: str, step: int, queue_size: int) -> None:
+        self.video_path = video_path
+        self.step = max(1, step)
+        self.frame_queue: queue.Queue = queue.Queue(maxsize=max(1, queue_size))
+        self.error: Exception | None = None
+        self.frames_decoded = 0
+        self._thread = threading.Thread(target=self._run, name="frame-reader", daemon=True)
+
+    def start(self) -> _FrameReaderThread:
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        cap = cv2.VideoCapture(self.video_path)
+        try:
+            if not cap.isOpened():
+                self.error = ValueError(f"Cannot open video for analysis: {self.video_path}")
+                return
+            frame_index = 0
+            while True:
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+                self.frames_decoded += 1
+                if frame_index % self.step == 0:
+                    self.frame_queue.put((frame_index, frame))
+                frame_index += 1
+        except Exception as exc:  # noqa: BLE001 - surfaced to the consumer thread
+            self.error = exc
+        finally:
+            cap.release()
+            self.frame_queue.put(self._SENTINEL)
+
+    def frames(self):
+        """Yield ``(frame_index, frame)`` tuples until the reader is exhausted.
+
+        Re-raises any decode-thread error in the *consumer* thread once the
+        stream is exhausted, so pipeline error handling stays centralised.
+        """
+        while True:
+            item = self.frame_queue.get()
+            if item is self._SENTINEL:
+                if self.error is not None:
+                    raise self.error
+                return
+            yield item
+
+    def join(self, timeout: float = 5.0) -> None:
+        self._thread.join(timeout=timeout)
 
 
 class AnalysisPipeline:
@@ -85,13 +181,12 @@ class AnalysisPipeline:
     def __init__(self, config: PipelineConfig, settings: Settings | None = None) -> None:
         self.config = config
         self.settings = settings or global_settings
-        self.motion = MotionDetector(
-            algorithm=config.motion_algorithm, min_area=config.min_motion_area
-        )
-        self.roi = ROIDetector(
-            min_area=config.min_motion_area, merge_iou=config.roi_merge_iou
-        )
         self.detector = ObjectDetector(enabled=config.enable_object_detection)
+        # Motion detector and ROI detector are constructed lazily inside run()
+        # once the resolved (non-"auto") algorithm and frame resolution are
+        # known.
+        self.motion: MotionDetector | None = None
+        self.roi: ROIDetector | None = None
 
     # ------------------------------------------------------------------ public
     def run(
@@ -102,69 +197,122 @@ class AnalysisPipeline:
     ) -> dict:
         """Execute the full pipeline for ``video`` and persist events.
 
-        Returns a small summary dict (counts) for logging/telemetry.
+        Returns a summary dict (counts + performance stats) for logging and
+        for the ``Video.processing_stats`` column.
         """
-        report = progress_cb or (lambda pct, msg: None)
+        pipeline_timer = LogTimer(logger, "full_pipeline_run")
+        with pipeline_timer:
+            stats = self._run_inner(video, db, progress_cb or (lambda pct, msg: None))
+        stats["total_pipeline_seconds"] = round(pipeline_timer.elapsed_seconds, 3)
+        video.processing_stats = json.dumps(stats)
+        db.commit()
+        return stats
+
+    def _run_inner(self, video: Video, db: Session, report: ProgressCallback) -> dict:
+        """The actual pipeline body, timed by :meth:`run`."""
         video_path = video.path
+        fps = video.fps or 25.0
+        total_frames = video.frame_count or 0
+        width = video.width or 0
+        height = video.height or 0
+        if not width or not height or not fps:
+            width, height, fps, total_frames = self._probe_fallback(
+                video_path, width, height, fps, total_frames
+            )
 
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise ValueError(f"Cannot open video for analysis: {video_path}")
+        resolved_algorithm = self._resolve_algorithm(video_path)
+        self.motion = MotionDetector(
+            algorithm=resolved_algorithm,
+            min_area=self.config.min_motion_area,
+            adaptive_threshold=self.config.adaptive_threshold,
+            frame_width=width,
+            frame_height=height,
+        )
+        self.roi = ROIDetector(
+            min_area=self.config.min_motion_area,
+            min_area_fraction=self.config.roi_min_area_fraction,
+            merge_iou=self.config.roi_merge_iou,
+            max_raw_contours=self.config.roi_max_raw_contours,
+        )
 
-        fps = video.fps or (cap.get(cv2.CAP_PROP_FPS) or 25.0)
-        total_frames = video.frame_count or int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-        width = video.width or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = video.height or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         step = max(1, self.config.frame_sample_step)
-
         heatmap = HeatmapAccumulator(height=height, width=width)
         samples: list[FrameSample] = []
+        frame_errors = 0
+        consecutive_errors = 0
 
-        report(2.0, "Extracting frames and detecting motion")
-        frame_index = 0
-        processed = 0
-        try:
-            while True:
-                ok, frame = cap.read()
-                if not ok or frame is None:
-                    break
-                if frame_index % step != 0:
-                    frame_index += 1
-                    continue
+        report(2.0, f"Extracting frames and detecting motion ({resolved_algorithm})")
+        motion_timer = LogTimer(logger, "motion_detection", item_count=None)
+        with motion_timer:
+            reader = _FrameReaderThread(video_path, step, self.config.frame_buffer_size).start()
+            processed = 0
+            try:
+                for frame_index, frame in reader.frames():
+                    try:
+                        result = self.motion.process(frame)
+                        heatmap.add(result.mask, frame)
+                        roi_boxes = self.roi.detect(result.mask)
+                        roi_present = bool(roi_boxes) and not result.is_warming_up
 
-                result = self.motion.process(frame)
-                heatmap.add(result.mask, frame)
-                roi_boxes = self.roi.detect(result.mask)
-                active = result.score >= self.config.motion_threshold and bool(roi_boxes)
+                        samples.append(
+                            FrameSample(
+                                time=frame_index / fps,
+                                frame_index=frame_index,
+                                score=result.score,
+                                roi_present=roi_present,
+                                rois=[b.as_tuple() for b in roi_boxes],
+                            )
+                        )
+                        consecutive_errors = 0
+                    except Exception as exc:  # noqa: BLE001 - one bad frame must not fail the run
+                        frame_errors += 1
+                        consecutive_errors += 1
+                        logger.warning(
+                            "Skipping unreadable/corrupt frame %d: %s", frame_index, exc
+                        )
+                        if consecutive_errors > MAX_CONSECUTIVE_FRAME_ERRORS:
+                            raise ValueError(
+                                f"Aborting analysis: {consecutive_errors} consecutive frames "
+                                "failed to process — the video is likely corrupt or uses an "
+                                "unsupported codec."
+                            ) from exc
 
-                samples.append(
-                    FrameSample(
-                        time=frame_index / fps,
-                        frame_index=frame_index,
-                        score=result.score,
-                        active=active,
-                        rois=[b.as_tuple() for b in roi_boxes],
-                    )
-                )
-
-                processed += 1
-                frame_index += 1
-                if total_frames and processed % 50 == 0:
-                    pct = 2.0 + 68.0 * (frame_index / max(1, total_frames))
-                    report(min(70.0, pct), "Analysing motion")
-        finally:
-            cap.release()
+                    processed += 1
+                    if total_frames and processed % 50 == 0:
+                        pct = 2.0 + 68.0 * (frame_index / max(1, total_frames))
+                        report(min(70.0, pct), "Analysing motion")
+            finally:
+                reader.join()
+        motion_timer_stats = {
+            "elapsed_seconds": round(motion_timer.elapsed_seconds, 3),
+            "frames_processed": processed,
+            "frames_with_errors": frame_errors,
+            "throughput_fps": round(processed / motion_timer.elapsed_seconds, 2)
+            if motion_timer.elapsed_seconds > 0
+            else 0.0,
+        }
+        logger.info("Motion detection stats for video %s: %s", video.id, motion_timer_stats)
 
         report(72.0, "Segmenting activity")
-        motion_samples = [
-            MotionSample(time=s.time, score=s.score, active=s.active) for s in samples
-        ]
-        segments = build_segments(
-            motion_samples,
-            merge_gap_sec=self.config.segment_merge_gap_sec,
-            min_duration_sec=self.config.min_segment_duration_sec,
+        with LogTimer(logger, "segmentation", item_count=len(samples)):
+            motion_samples = [
+                MotionSample(time=s.time, score=s.score, roi_present=s.roi_present) for s in samples
+            ]
+            segments = build_segments(
+                motion_samples,
+                enter_threshold=self.config.motion_threshold,
+                exit_threshold=self.config.motion_threshold * self.config.motion_hysteresis_ratio,
+                smoothing_window=self.config.motion_smoothing_window,
+                merge_gap_sec=self.config.segment_merge_gap_sec,
+                min_duration_sec=self.config.min_segment_duration_sec,
+            )
+        logger.info(
+            "Video %s: %d segments from %d samples (algorithm=%s)",
+            video.id,
+            len(segments),
+            len(samples),
+            resolved_algorithm,
         )
-        logger.info("Video %s: %d segments from %d samples", video.id, len(segments), len(samples))
 
         report(75.0, "Generating heatmap")
         heatmap_path = self._save_heatmap(video, heatmap)
@@ -177,22 +325,53 @@ class AnalysisPipeline:
             video.thumbnail_path = str(video_thumb)
 
         report(78.0, "Building clips and detecting objects")
-        self._materialise_events(video, db, samples, segments, width, height, report)
+        with LogTimer(logger, "event_materialisation", item_count=len(segments), item_label="events"):
+            self._materialise_events(video, db, samples, segments, width, height, report)
 
         video.status = VideoStatus.COMPLETED
         video.progress = 100.0
         video.status_message = "Analysis complete"
-        video.motion_algorithm = self.config.motion_algorithm
+        video.motion_algorithm = resolved_algorithm
         video.analyzed_at = datetime.now(UTC)
         db.commit()
 
+        cache_stats = self.detector.cache_stats()
         return {
             "events": len(segments),
             "samples": len(samples),
+            "frames_processed": processed,
+            "frames_with_errors": frame_errors,
             "object_detection": self.detector.available,
+            "resolved_motion_algorithm": resolved_algorithm,
+            "motion_detection_seconds": motion_timer_stats["elapsed_seconds"],
+            "motion_detection_throughput_fps": motion_timer_stats["throughput_fps"],
+            "object_detection_cache_hits": cache_stats["cache_hits"],
+            "object_detection_cache_misses": cache_stats["cache_misses"],
         }
 
     # ----------------------------------------------------------------- helpers
+    def _resolve_algorithm(self, video_path: str) -> str:
+        """Resolve the ``auto`` pseudo-algorithm to a concrete one, if requested."""
+        if self.config.motion_algorithm != AUTO:
+            return self.config.motion_algorithm
+        with LogTimer(logger, "auto_algorithm_selection"):
+            return select_best_algorithm(video_path)
+
+    def _probe_fallback(
+        self, video_path: str, width: int, height: int, fps: float, total_frames: int
+    ) -> tuple[int, int, float, int]:
+        """Fallback metadata probe used only if the DB row is missing values."""
+        cap = cv2.VideoCapture(video_path)
+        try:
+            if cap.isOpened():
+                width = width or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = height or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = fps or (cap.get(cv2.CAP_PROP_FPS) or 25.0)
+                total_frames = total_frames or int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        finally:
+            cap.release()
+        return width, height, fps, total_frames
+
     def _materialise_events(
         self,
         video: Video,
@@ -205,10 +384,18 @@ class AnalysisPipeline:
     ) -> None:
         """Create Event/ROI/Detection rows plus clips and thumbnails."""
         total = max(1, len(segments))
+        # Samples are chronologically ordered; binary-search the slice for
+        # each segment instead of a full linear scan per segment. This turns
+        # O(events x samples) into O(events x log(samples)) — meaningful on a
+        # multi-hour recording with hundreds of segments and tens of
+        # thousands of samples.
+        sample_times = [s.time for s in samples]
+
         for idx, seg in enumerate(segments):
-            seg_samples = [
-                s for s in samples if seg.start_time <= s.time <= seg.end_time
-            ]
+            lo = bisect_left(sample_times, seg.start_time)
+            hi = bisect_right(sample_times, seg.end_time)
+            seg_samples = samples[lo:hi]
+
             merged_rois = self._aggregate_rois(seg_samples, width, height)
             peak_sample = max(seg_samples, key=lambda s: s.score, default=None)
 
@@ -217,16 +404,18 @@ class AnalysisPipeline:
                 start_time=round(seg.start_time, 3),
                 end_time=round(seg.end_time, 3),
                 duration=round(seg.duration, 3),
-                motion_score=round(seg.avg_score, 5),
-                peak_motion_score=round(seg.peak_score, 5),
-                confidence=round(min(1.0, seg.avg_score * 8), 4),
+                motion_score=round(seg.avg_normalized_score, 5),
+                peak_motion_score=round(seg.peak_normalized_score, 5),
+                confidence=round(min(1.0, seg.avg_normalized_score * 1.2), 4),
             )
             db.add(event)
             db.flush()  # obtain event.id
 
             for box in merged_rois:
                 x, y, w, h = box
-                event.rois.append(ROI(x=x, y=y, w=w, h=h, confidence=round(seg.peak_score, 4)))
+                event.rois.append(
+                    ROI(x=x, y=y, w=w, h=h, confidence=round(seg.peak_normalized_score, 4))
+                )
 
             # ---- object detection on a few representative frames -------------
             detections = self._detect_for_segment(video.path, seg, peak_sample)
@@ -238,6 +427,7 @@ class AnalysisPipeline:
                         confidence=det.confidence,
                         timestamp=round(seg.start_time, 3),
                         prohibited=det.prohibited,
+                        heuristic=det.heuristic,
                         x=det.x,
                         y=det.y,
                         w=det.w,
@@ -276,7 +466,14 @@ class AnalysisPipeline:
     def _detect_for_segment(
         self, video_path: str, seg: Segment, peak: FrameSample | None
     ) -> list[ObjectDetection]:
-        """Run YOLO on up to three frames spanning the segment; dedupe by label."""
+        """Run batched YOLO inference on up to three frames spanning the segment.
+
+        All representative frames for this segment are collected first and
+        passed to :meth:`ObjectDetector.detect_batch` in a single call, rather
+        than three sequential single-frame calls — this amortises inference
+        overhead (Python dispatch, and on GPU, kernel-launch latency) across
+        the batch instead of paying it three times.
+        """
         if not self.detector.available:
             return []
 
@@ -287,22 +484,28 @@ class AnalysisPipeline:
                 seg.end_time,
             }
         )
-        best: dict[str, ObjectDetection] = {}
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             return []
+        frames: list[np.ndarray] = []
         try:
             for t in times:
                 cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t) * 1000.0)
                 ok, frame = cap.read()
-                if not ok or frame is None:
-                    continue
-                for det in self.detector.detect(frame):
-                    prev = best.get(det.label)
-                    if prev is None or det.confidence > prev.confidence:
-                        best[det.label] = det
+                if ok and frame is not None:
+                    frames.append(frame)
         finally:
             cap.release()
+
+        if not frames:
+            return []
+
+        best: dict[str, ObjectDetection] = {}
+        for frame_detections in self.detector.detect_batch(frames):
+            for det in frame_detections:
+                prev = best.get(det.label)
+                if prev is None or det.confidence > prev.confidence:
+                    best[det.label] = det
         return list(best.values())
 
     def _save_heatmap(self, video: Video, heatmap: HeatmapAccumulator) -> str | None:

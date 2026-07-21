@@ -10,6 +10,7 @@ import { ClipGallery } from "@/components/ClipGallery";
 import { EventTable } from "@/components/EventTable";
 import { HeatmapView } from "@/components/HeatmapView";
 import { MotionTimeline } from "@/components/MotionTimeline";
+import { ProcessingStatsPanel } from "@/components/ProcessingStatsPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,8 @@ export function VideoDetailPage() {
 
   const { data: video, isLoading } = useVideo(videoId);
   const completed = video?.status === "completed";
-  const { data: events = [] } = useEvents(videoId, {}, completed);
+  const { data: eventsPage } = useEvents(videoId, { limit: 1000 }, completed);
+  const events = eventsPage?.items ?? [];
   const { data: timeline } = useTimeline(videoId, completed);
   const { data: analytics } = useAnalytics(videoId, completed);
 
@@ -127,9 +129,11 @@ export function VideoDetailPage() {
               src={videoUrl}
               nativeWidth={video.width}
               nativeHeight={video.height}
+              fps={video.fps}
               events={events}
               currentTime={currentTime}
               onTimeUpdate={setCurrentTime}
+              onSeek={seekTo}
             />
             {timeline ? (
               <MotionTimeline timeline={timeline} currentTime={currentTime} onSeek={seekTo} />
@@ -147,6 +151,7 @@ export function VideoDetailPage() {
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="clips">Clips</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
           </TabsList>
           <TabsContent value="analytics">
             {analytics ? (
@@ -160,6 +165,9 @@ export function VideoDetailPage() {
           </TabsContent>
           <TabsContent value="clips">
             <ClipGallery videoId={video.id} onSeek={seekTo} />
+          </TabsContent>
+          <TabsContent value="performance">
+            <ProcessingStatsPanel stats={video.processing_stats} />
           </TabsContent>
         </Tabs>
       ) : null}

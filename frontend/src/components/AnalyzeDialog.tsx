@@ -25,6 +25,11 @@ import { useAnalyzeVideo } from "@/hooks/useVideos";
 import type { MotionAlgorithm } from "@/types";
 
 const ALGORITHMS: { value: MotionAlgorithm; label: string; description: string }[] = [
+  {
+    value: "auto",
+    label: "Auto (recommended)",
+    description: "Pre-scans the video and picks the best fit for its lighting and noise",
+  },
   { value: "mog2", label: "MOG2 background subtraction", description: "Robust to gradual lighting change" },
   { value: "frame_diff", label: "Frame differencing", description: "Fast and sensitive to any change" },
   { value: "optical_flow", label: "Farneback optical flow", description: "Captures true directional movement" },
@@ -38,7 +43,7 @@ interface Props {
 
 export function AnalyzeDialog({ videoId, label = "Analyze", variant = "default" }: Props) {
   const [open, setOpen] = useState(false);
-  const [algorithm, setAlgorithm] = useState<MotionAlgorithm>("mog2");
+  const [algorithm, setAlgorithm] = useState<MotionAlgorithm>("auto");
   const [objectDetection, setObjectDetection] = useState(true);
   const analyze = useAnalyzeVideo(videoId);
 
@@ -88,7 +93,10 @@ export function AnalyzeDialog({ videoId, label = "Analyze", variant = "default" 
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>
               <Label>Object detection (YOLOv11)</Label>
-              <p className="text-xs text-muted-foreground">Detect phones, paper, bags and people.</p>
+              <p className="text-xs text-muted-foreground">
+                Detect phones, bags, bottles, laptops and people. Also flags books as a
+                heuristic (imperfect) signal for possible notes — see the docs for why.
+              </p>
             </div>
             <Switch checked={objectDetection} onCheckedChange={setObjectDetection} />
           </div>

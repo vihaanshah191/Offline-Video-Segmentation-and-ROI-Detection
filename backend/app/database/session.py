@@ -3,14 +3,15 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
 # SQLite needs ``check_same_thread=False`` because the background worker thread
 # touches the same connection pool as the request threads.
-_connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+_IS_SQLITE = settings.database_url.startswith("sqlite")
+_connect_args = {"check_same_thread": False} if _IS_SQLITE else {}
 
 engine = create_engine(
     settings.database_url,
@@ -18,6 +19,27 @@ engine = create_engine(
     pool_pre_ping=True,
     future=True,
 )
+
+
+if _IS_SQLITE:
+
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        """Enable FK constraint enforcement (off by default in SQLite).
+
+        The ORM already performs cascading deletes explicitly (see the
+        ``cascade="all, delete-orphan"`` relationships in ``app/models/video.py``),
+        so application code is unaffected either way. This is defense in
+        depth: it also makes the ``ondelete="CASCADE"`` declared on every
+        ForeignKey enforceable at the database level, protecting data
+        integrity against any future code path (a raw SQL migration, a bulk
+        delete, a different ORM session) that bypasses the ORM's cascade
+        logic.
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
