@@ -11,8 +11,12 @@ The stack ships with production-ready Docker images and a Compose file.
 | `redis` | `redis:7-alpine` | `6379` | Broker (only with `--profile celery`). |
 | `worker` | same as backend | — | Celery worker (only with `--profile celery`). |
 
-A named volume `storage` persists uploads, clips, heatmaps, thumbnails and the
-SQLite database across restarts.
+Two named volumes persist state across restarts: `storage` (uploads, clips,
+heatmaps, thumbnails — only these specific subdirectories are ever mounted
+for public HTTP access) and `data` (the SQLite database). They're
+deliberately separate: the database must never live under a directory that
+could be served over HTTP, now or after a future change — see
+`SYSTEM_DESIGN.md` Section 8.5 for the vulnerability this prevents.
 
 ## Basic usage
 

@@ -63,10 +63,16 @@ class VideoDetail(VideoRead):
         """
         if isinstance(value, str):
             try:
-                return json.loads(value)
+                parsed = json.loads(value)
             except json.JSONDecodeError:
                 return None
-        return value
+            # The column is always written as a JSON *object* (see
+            # AnalysisPipeline.run); guard defensively against any other
+            # JSON type rather than passing it through untyped.
+            return parsed if isinstance(parsed, dict) else None
+        if value is None or isinstance(value, dict):
+            return value
+        return None
 
 
 class AnalyzeRequest(BaseModel):

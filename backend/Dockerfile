@@ -24,12 +24,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Non-root runtime user.
+# NOTE: /data (the database) and /storage (public artefacts) are deliberately
+# separate top-level directories — only /storage's videos/clips/heatmaps/
+# thumbnails subdirectories are ever mounted for public HTTP access (see
+# app/main.py), and the database must never be placed under a directory that
+# could be served that way, now or after a future refactor. See
+# SYSTEM_DESIGN.md Section 8.5 for the vulnerability this structure prevents.
 RUN useradd --create-home --uid 1000 appuser \
-    && mkdir -p /storage \
-    && chown -R appuser:appuser /app /storage
+    && mkdir -p /storage /data \
+    && chown -R appuser:appuser /app /storage /data
 USER appuser
 
-ENV DATABASE_URL=sqlite:////storage/app.db \
+ENV DATA_DIR=/data \
+    DATABASE_URL=sqlite:////data/app.db \
     STORAGE_DIR=/storage \
     VIDEOS_DIR=/storage/videos \
     CLIPS_DIR=/storage/clips \

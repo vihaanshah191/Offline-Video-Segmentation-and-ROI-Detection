@@ -36,10 +36,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install fastapi "uvicorn[standard]" python-multipart pydantic \
             pydantic-settings SQLAlchemy opencv-python-headless numpy reportlab \
-            pytest pytest-cov httpx ruff
+            pytest pytest-cov httpx ruff mypy
 
       - name: Ruff lint
         run: ruff check app tests
+
+      - name: Mypy type-check
+        run: mypy app --ignore-missing-imports
 
       - name: Run tests
         env:

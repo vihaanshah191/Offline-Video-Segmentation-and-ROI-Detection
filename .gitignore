@@ -20,13 +20,16 @@ frontend/.vite/
 *.local
 
 # ---- Storage / generated artefacts ---------------------------------------
-storage/app.db
+# The SQLite database lives in data/ (deliberately outside storage/, which is
+# partially served over HTTP — see SYSTEM_DESIGN.md Section 8.5).
+data/app.db
 storage/videos/*
 storage/clips/*
 storage/heatmaps/*
 storage/thumbnails/*
 storage/reports/*
 !storage/**/.gitkeep
+!data/**/.gitkeep
 
 # ---- Env / secrets --------------------------------------------------------
 .env

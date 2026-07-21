@@ -228,10 +228,10 @@ class ObjectDetector:
             inferred = self._run_inference(model, to_infer_frames)
             for idx, dets in zip(to_infer_indices, inferred, strict=True):
                 results[idx] = dets
-                key = cache_keys[idx]
-                if key is not None and self._cache_capacity > 0:
-                    self._cache[key] = dets
-                    self._cache.move_to_end(key)
+                cache_key = cache_keys[idx]
+                if cache_key is not None and self._cache_capacity > 0:
+                    self._cache[cache_key] = dets
+                    self._cache.move_to_end(cache_key)
                     while len(self._cache) > self._cache_capacity:
                         self._cache.popitem(last=False)
 

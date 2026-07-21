@@ -19,8 +19,8 @@ frontend: ## Run the frontend dev server
 test: ## Run backend tests
 	cd backend && pytest
 
-lint: ## Lint backend (ruff) and type-check frontend
-	cd backend && ruff check app tests
+lint: ## Lint + type-check backend (ruff, mypy) and type-check frontend
+	cd backend && ruff check app tests && mypy app --ignore-missing-imports
 	cd frontend && npm run build
 
 build: ## Production build of the frontend
@@ -40,5 +40,5 @@ down: ## Stop the stack
 
 clean: ## Remove generated artefacts (keeps sample_data/outputs)
 	rm -rf storage/videos/* storage/clips/* storage/heatmaps/* \
-		storage/thumbnails/* storage/reports/* storage/app.db
+		storage/thumbnails/* storage/reports/* data/app.db
 	rm -rf frontend/dist backend/.pytest_cache

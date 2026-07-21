@@ -5,6 +5,12 @@
 #
 # The frontend is served by nginx on http://localhost:8080 and proxies /api and
 # /storage to the backend, so everything is same-origin.
+#
+# Two separate volumes back the backend: `storage` (public artefacts — videos,
+# clips, heatmaps, thumbnails; only these specific subdirectories are ever
+# mounted for HTTP access, see backend/app/main.py) and `data` (the SQLite
+# database, deliberately never placed under `storage` — see
+# SYSTEM_DESIGN.md Section 8.5).
 
 services:
   backend:
@@ -18,10 +24,13 @@ services:
       ENABLE_OBJECT_DETECTION: ${ENABLE_OBJECT_DETECTION:-true}
       YOLO_DEVICE: ${YOLO_DEVICE:-auto}
       CORS_ORIGINS: "http://localhost:8080,http://localhost:5173"
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
     volumes:
       - storage:/storage
+      - data:/data
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -52,7 +61,8 @@ services:
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
     environment:
       TASK_BACKEND: celery
-      DATABASE_URL: sqlite:////storage/app.db
+      DATA_DIR: /data
+      DATABASE_URL: sqlite:////data/app.db
       STORAGE_DIR: /storage
       VIDEOS_DIR: /storage/videos
       CLIPS_DIR: /storage/clips
@@ -63,9 +73,11 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
     volumes:
       - storage:/storage
+      - data:/data
     depends_on:
       - redis
     restart: unless-stopped
 
 volumes:
   storage:
+  data:
