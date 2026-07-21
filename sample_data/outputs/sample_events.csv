@@ -1,0 +1,4 @@
+event_id,start_time_s,end_time_s,duration_s,motion_score,peak_motion_score,confidence,objects,prohibited_objects,roi_count,clip_path
+1,2.000,6.400,4.400,0.02178,0.03369,0.1742,,,7,/home/user/Offline-Video-Segmentation-and-ROI-Detection/storage/clips/video_1_event_1.mp4
+2,8.000,12.400,4.400,0.02265,0.03368,0.1812,,,7,/home/user/Offline-Video-Segmentation-and-ROI-Detection/storage/clips/video_1_event_2.mp4
+3,14.000,19.467,5.467,0.02472,0.03372,0.1977,,,6,/home/user/Offline-Video-Segmentation-and-ROI-Detection/storage/clips/video_1_event_3.mp4

@@ -1,0 +1,41 @@
+# ---- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.pt                      # YOLO weights (downloaded at runtime)
+
+# ---- Node / frontend ------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ---- Storage / generated artefacts ---------------------------------------
+storage/app.db
+storage/videos/*
+storage/clips/*
+storage/heatmaps/*
+storage/thumbnails/*
+storage/reports/*
+!storage/**/.gitkeep
+
+# ---- Env / secrets --------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---- OS / editor ----------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
