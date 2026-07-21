@@ -1,8 +1,8 @@
 """ORM models package."""
 from app.models.video import (
+    ROI,
     Detection,
     Event,
-    ROI,
     Video,
     VideoStatus,
 )

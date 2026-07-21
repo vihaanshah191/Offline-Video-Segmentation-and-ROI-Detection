@@ -34,11 +34,10 @@ os.environ.update(
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.database.session import SessionLocal, engine, init_db  # noqa: E402
 from app.database.base import Base  # noqa: E402
+from app.database.session import SessionLocal, engine, init_db  # noqa: E402
 from app.main import app  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)

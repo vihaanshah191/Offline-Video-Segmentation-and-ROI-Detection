@@ -1,0 +1,71 @@
+# Docker Compose stack for the Offline Video Segmentation & ROI Detection MVP.
+#
+#   docker compose up --build          # backend + frontend (thread worker)
+#   docker compose --profile celery up # add Redis + Celery distributed worker
+#
+# The frontend is served by nginx on http://localhost:8080 and proxies /api and
+# /storage to the backend, so everything is same-origin.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: video-analytics-backend:latest
+    environment:
+      # Use the thread worker by default (no broker required).
+      TASK_BACKEND: ${TASK_BACKEND:-thread}
+      DEFAULT_MOTION_ALGORITHM: ${DEFAULT_MOTION_ALGORITHM:-mog2}
+      ENABLE_OBJECT_DETECTION: ${ENABLE_OBJECT_DETECTION:-true}
+      YOLO_DEVICE: ${YOLO_DEVICE:-auto}
+      CORS_ORIGINS: "http://localhost:8080,http://localhost:5173"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - storage:/storage
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    image: video-analytics-frontend:latest
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  # ---- Optional distributed worker (enable with --profile celery) ---------
+  redis:
+    image: redis:7-alpine
+    profiles: ["celery"]
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+    image: video-analytics-backend:latest
+    profiles: ["celery"]
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+    environment:
+      TASK_BACKEND: celery
+      DATABASE_URL: sqlite:////storage/app.db
+      STORAGE_DIR: /storage
+      VIDEOS_DIR: /storage/videos
+      CLIPS_DIR: /storage/clips
+      HEATMAPS_DIR: /storage/heatmaps
+      THUMBNAILS_DIR: /storage/thumbnails
+      REPORTS_DIR: /storage/reports
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - storage:/storage
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  storage:

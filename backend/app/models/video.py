@@ -10,7 +10,7 @@ The schema mirrors the AI pipeline output:
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     DateTime,
@@ -27,7 +27,7 @@ from app.database.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class VideoStatus(str, enum.Enum):
@@ -74,7 +74,7 @@ class Video(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    events: Mapped[list["Event"]] = relationship(
+    events: Mapped[list[Event]] = relationship(
         back_populates="video",
         cascade="all, delete-orphan",
         order_by="Event.start_time",
@@ -111,11 +111,11 @@ class Event(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
-    video: Mapped["Video"] = relationship(back_populates="events")
-    rois: Mapped[list["ROI"]] = relationship(
+    video: Mapped[Video] = relationship(back_populates="events")
+    rois: Mapped[list[ROI]] = relationship(
         back_populates="event", cascade="all, delete-orphan"
     )
-    detections: Mapped[list["Detection"]] = relationship(
+    detections: Mapped[list[Detection]] = relationship(
         back_populates="event", cascade="all, delete-orphan"
     )
 
@@ -137,7 +137,7 @@ class ROI(Base):
     h: Mapped[int] = mapped_column(Integer, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
 
-    event: Mapped["Event"] = relationship(back_populates="rois")
+    event: Mapped[Event] = relationship(back_populates="rois")
 
 
 class Detection(Base):
@@ -160,4 +160,4 @@ class Detection(Base):
     w: Mapped[int] = mapped_column(Integer, default=0)
     h: Mapped[int] = mapped_column(Integer, default=0)
 
-    event: Mapped["Event"] = relationship(back_populates="detections")
+    event: Mapped[Event] = relationship(back_populates="detections")

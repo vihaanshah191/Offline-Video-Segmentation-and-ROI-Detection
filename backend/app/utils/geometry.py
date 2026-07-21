@@ -4,7 +4,7 @@ Boxes are represented as ``(x, y, w, h)`` integer tuples in pixel coordinates.
 """
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 Box = tuple[int, int, int, int]
 

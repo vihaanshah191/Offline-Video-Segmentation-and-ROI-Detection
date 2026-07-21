@@ -3,14 +3,16 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.core.logging_config import get_logger
 from app.models.video import Video
-from app.services.analytics import compute_analytics
-from app.services.analytics import _events_for  # internal helper reuse
+from app.services.analytics import (
+    _events_for,  # internal helper reuse
+    compute_analytics,
+)
 
 logger = get_logger(__name__)
 
@@ -87,7 +89,7 @@ def build_pdf_report(db: Session, video: Video) -> bytes:
     story.append(Paragraph("Video Surveillance Investigation Report", styles["Title"]))
     story.append(Spacer(1, 6 * mm))
 
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     meta_rows = [
         ["File", video.original_name],
         ["Resolution", f"{video.width}x{video.height}"],

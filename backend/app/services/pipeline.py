@@ -13,21 +13,21 @@ thumbnails — keeping it viable for multi-hour 1080p recordings.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Callable
+from datetime import UTC, datetime
 
 import cv2
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings, settings as global_settings
+from app.core.config import Settings
+from app.core.config import settings as global_settings
 from app.core.logging_config import get_logger
-from app.models.video import Detection, Event, ROI, Video, VideoStatus
+from app.models.video import ROI, Detection, Event, Video, VideoStatus
 from app.services.heatmap import HeatmapAccumulator
 from app.services.motion_detection import MotionDetector
 from app.services.object_detection import ObjectDetection, ObjectDetector
-from app.services.roi_detection import ROIBox, ROIDetector
+from app.services.roi_detection import ROIDetector
 from app.services.segmentation import MotionSample, Segment, build_segments
 from app.utils.geometry import Box, merge_boxes
 from app.utils.video_io import cut_clip, extract_thumbnail
@@ -62,7 +62,7 @@ class PipelineConfig:
     enable_object_detection: bool
 
     @classmethod
-    def from_settings(cls, s: Settings, **overrides) -> "PipelineConfig":
+    def from_settings(cls, s: Settings, **overrides) -> PipelineConfig:
         base = cls(
             motion_algorithm=s.default_motion_algorithm,
             frame_sample_step=s.frame_sample_step,
@@ -183,7 +183,7 @@ class AnalysisPipeline:
         video.progress = 100.0
         video.status_message = "Analysis complete"
         video.motion_algorithm = self.config.motion_algorithm
-        video.analyzed_at = datetime.now(timezone.utc)
+        video.analyzed_at = datetime.now(UTC)
         db.commit()
 
         return {

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from app.services.motion_detection import (
     FRAME_DIFF,
     MOG2,
