@@ -1,7 +1,9 @@
 """Event, ROI and Detection Pydantic schemas."""
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.utils.severity import compute_severity
 
 
 class ROIRead(BaseModel):
@@ -59,7 +61,16 @@ class EventRead(BaseModel):
     thumbnail_path: str | None
     rois: list[ROIRead] = []
     detections: list[DetectionRead] = []
+    severity: str = Field(
+        default="normal",
+        description="'critical' | 'warning' | 'normal', derived from detections + peak motion.",
+    )
 
     @property
     def object_list(self) -> list[str]:
         return [o for o in self.objects.split(",") if o]
+
+    @model_validator(mode="after")
+    def _compute_severity(self) -> "EventRead":
+        self.severity = compute_severity(self.peak_motion_score, self.detections)
+        return self

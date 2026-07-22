@@ -12,13 +12,14 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.video import Detection, Event, Video
+from app.models.video import ROI, Detection, Event, Video
 from app.schemas.analytics import (
     ObjectCount,
     TimelinePoint,
     TimelineResponse,
     VideoAnalytics,
 )
+from app.utils.severity import compute_severity
 
 
 def _events_for(db: Session, video_id: int) -> list[Event]:
@@ -46,9 +47,18 @@ def compute_analytics(db: Session, video: Video) -> VideoAnalytics:
             func.count(Event.id),
             func.coalesce(func.sum(Event.duration), 0.0),
             func.coalesce(func.avg(Event.motion_score), 0.0),
+            func.coalesce(func.avg(Event.duration), 0.0),
         ).where(Event.video_id == video_id)
     ).one()
-    total_events, total_motion, avg_score = summary
+    total_events, total_motion, avg_score, avg_event_duration = summary
+
+    total_roi_area = int(
+        db.execute(
+            select(func.coalesce(func.sum(ROI.w * ROI.h), 0))
+            .join(Event, Event.id == ROI.event_id)
+            .where(Event.video_id == video_id)
+        ).scalar_one()
+    )
 
     duration = video.duration or 0.0
     coverage = (total_motion / duration) if duration > 0 else 0.0
@@ -95,6 +105,12 @@ def compute_analytics(db: Session, video: Video) -> VideoAnalytics:
         .where(Event.video_id == video_id, Detection.prohibited.is_(True))
     ).scalar_one()
 
+    # A rough but useful "how much did encoding shrink this" figure: raw,
+    # uncompressed RGB frame data versus the actual on-disk file size. Not
+    # exact (containers/codecs vary), but a stable, explainable estimate.
+    raw_size = (video.width or 0) * (video.height or 0) * 3 * (video.frame_count or 0)
+    compression_ratio = round(raw_size / video.size_bytes, 1) if video.size_bytes > 0 and raw_size > 0 else None
+
     return VideoAnalytics(
         video_id=video_id,
         total_events=int(total_events),
@@ -105,9 +121,14 @@ def compute_analytics(db: Session, video: Video) -> VideoAnalytics:
         peak_activity_time=round(peak_row.start_time, 2) if peak_row else 0.0,
         longest_event_duration=round(longest_row.duration, 2) if longest_row else 0.0,
         longest_event_id=longest_row.id if longest_row else None,
+        average_event_duration=round(float(avg_event_duration), 2),
+        total_roi_area_pixels=total_roi_area,
+        top_object=object_counts[0].label if object_counts else None,
         total_detections=int(total_detections),
         prohibited_detections=int(prohibited_count),
         object_counts=object_counts,
+        storage_bytes=video.size_bytes,
+        compression_ratio=compression_ratio,
     )
 
 
@@ -160,6 +181,7 @@ def compute_timeline(db: Session, video: Video, *, max_points: int = 600) -> Tim
             "end": round(e.end_time, 3),
             "motion_score": round(e.motion_score, 5),
             "objects": [o for o in e.objects.split(",") if o],
+            "severity": compute_severity(e.peak_motion_score, e.detections),
         }
         for e in events
     ]

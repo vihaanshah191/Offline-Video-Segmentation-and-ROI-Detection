@@ -74,6 +74,8 @@ def analyze_video(
         enable_object_detection=req.enable_object_detection,
         frame_sample_step=req.frame_sample_step,
         min_motion_area=req.min_motion_area,
+        object_detection_confidence=req.object_detection_confidence,
+        object_detection_classes=req.object_detection_classes,
     )
     enqueue_analysis(video.id, config)
     AuthService(db).record_audit(

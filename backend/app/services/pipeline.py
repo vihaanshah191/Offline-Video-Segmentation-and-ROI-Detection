@@ -92,6 +92,8 @@ class PipelineConfig:
     roi_max_raw_contours: int = 200
     adaptive_threshold: bool = True
     frame_buffer_size: int = 64
+    object_detection_confidence: float | None = None
+    object_detection_classes: list[str] | None = None
 
     @classmethod
     def from_settings(cls, s: Settings, **overrides) -> PipelineConfig:
@@ -188,7 +190,11 @@ class AnalysisPipeline:
     def __init__(self, config: PipelineConfig, settings: Settings | None = None) -> None:
         self.config = config
         self.settings = settings or global_settings
-        self.detector = ObjectDetector(enabled=config.enable_object_detection)
+        self.detector = ObjectDetector(
+            enabled=config.enable_object_detection,
+            confidence=config.object_detection_confidence,
+            class_filter=config.object_detection_classes,
+        )
         # Motion detector and ROI detector are constructed lazily inside run()
         # once the resolved (non-"auto") algorithm and frame resolution are
         # known.

@@ -1,6 +1,7 @@
 """Integration test for the full analysis pipeline."""
 from __future__ import annotations
 
+import dataclasses
 import shutil
 from pathlib import Path
 
@@ -8,6 +9,26 @@ from app.core.config import settings
 from app.models.video import Video, VideoStatus
 from app.services.pipeline import AnalysisPipeline, PipelineConfig
 from app.utils.video_io import probe_metadata
+
+
+def test_pipeline_config_survives_celery_style_serialization() -> None:
+    """Regression test: PipelineConfig is a ``slots=True`` dataclass, which
+    has no ``__dict__`` — a plain ``config.__dict__`` (as the Celery task
+    dispatch previously did) raises AttributeError, silently caught by
+    enqueue_analysis's broad except-and-fall-back-to-threads, so the celery
+    backend never actually ran a single job even when configured. The fix is
+    ``dataclasses.asdict()``, which must round-trip through
+    ``PipelineConfig(**...)`` exactly as celery_app.analyze_video_task does."""
+    original = PipelineConfig.from_settings(
+        settings,
+        motion_algorithm="mog2",
+        object_detection_confidence=0.42,
+        object_detection_classes=["phone", "bag"],
+    )
+    as_dict = dataclasses.asdict(original)
+    assert isinstance(as_dict, dict)
+    reconstructed = PipelineConfig(**as_dict)
+    assert reconstructed == original
 
 
 def _register_video(db_session, sample_video_path: Path) -> Video:

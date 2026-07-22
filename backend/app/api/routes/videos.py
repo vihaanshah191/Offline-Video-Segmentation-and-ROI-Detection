@@ -99,6 +99,17 @@ def list_videos(
 
 
 @router.get(
+    "/queue",
+    response_model=list[VideoRead],
+    summary="Videos currently queued or processing",
+)
+def get_queue(service: VideoService = Depends(get_video_service)) -> list[VideoRead]:
+    """The operational 'what's running right now' view: every video that is
+    queued or actively processing, oldest-queued first."""
+    return [VideoRead.model_validate(v) for v in service.list_queue()]
+
+
+@router.get(
     "/stats",
     response_model=GlobalStats,
     summary="Aggregate statistics across every uploaded video",

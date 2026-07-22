@@ -12,6 +12,7 @@ transitions, progress reporting and error capture.
 """
 from __future__ import annotations
 
+import dataclasses
 import threading
 
 from app.core.config import settings
@@ -100,7 +101,9 @@ def enqueue_analysis(video_id: int, config: PipelineConfig) -> None:
         try:
             from app.workers.celery_app import analyze_video_task
 
-            analyze_video_task.delay(video_id, config.__dict__)
+            # PipelineConfig is a slots dataclass (no __dict__); asdict() is
+            # the correct way to get a plain, Celery-serializable mapping.
+            analyze_video_task.delay(video_id, dataclasses.asdict(config))
             logger.info("Enqueued Celery analysis for video %s", video_id)
             return
         except Exception as exc:  # noqa: BLE001 - fall back to threads

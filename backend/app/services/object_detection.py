@@ -143,6 +143,7 @@ class ObjectDetector:
         custom_model_path: str | None = None,
         custom_label_map_path: str | None = None,
         cache_size: int | None = None,
+        class_filter: list[str] | None = None,
     ) -> None:
         custom_path = custom_model_path or settings.custom_yolo_model_path
         self.model_name = custom_path or model_name or settings.yolo_model
@@ -156,6 +157,11 @@ class ObjectDetector:
         self.class_map, self.prohibited_labels, self.relevant_labels = self._load_label_config(
             custom_label_map_path or settings.custom_label_map_path
         )
+        # Optional per-run UI filter (e.g. "only show me phone/bag"): a
+        # further restriction on top of relevant_labels, not a replacement
+        # for it — a class outside the model's own relevant-label set is
+        # never surfaced regardless of this filter.
+        self.class_filter: set[str] | None = set(class_filter) if class_filter else None
 
         self._model = None
         self._load_failed = False
@@ -302,6 +308,8 @@ class ObjectDetector:
             raw_label = names.get(cls_id, str(cls_id)) if isinstance(names, dict) else names[cls_id]
             label = self.class_map.get(raw_label)
             if label is None or label not in self.relevant_labels:
+                continue
+            if self.class_filter is not None and label not in self.class_filter:
                 continue
             conf = float(box.conf[0])
             # Defensive re-filter: some model/wrapper combinations do not

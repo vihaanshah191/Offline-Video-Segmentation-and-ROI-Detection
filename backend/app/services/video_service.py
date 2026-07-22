@@ -174,6 +174,17 @@ class VideoService:
         items = list(self.db.execute(stmt).scalars().all())
         return PageResult(items=items, total=total)
 
+    def list_queue(self) -> list[Video]:
+        """Every currently queued or processing video, oldest-queued first —
+        the operational "what's running right now" view for the dashboard
+        and the ``/api/queue`` endpoint."""
+        stmt = (
+            select(Video)
+            .where(Video.status.in_([VideoStatus.QUEUED, VideoStatus.PROCESSING]))
+            .order_by(Video.created_at.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def event_count(self, video_id: int) -> int:
         return int(
             self.db.execute(

@@ -95,6 +95,19 @@ class AnalyzeRequest(BaseModel):
     min_motion_area: int | None = Field(
         default=None, ge=1, description="Minimum contour area (px) counted as motion."
     )
+    object_detection_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum YOLO confidence to keep a detection (overrides the server default for this run).",
+    )
+    object_detection_classes: list[str] | None = Field(
+        default=None,
+        description=(
+            "Restrict detections to only these labels (e.g. ['phone', 'bag']). "
+            "A further filter on top of the model's own relevant-label set, not a replacement for it."
+        ),
+    )
 
 
 class GlobalStats(BaseModel):

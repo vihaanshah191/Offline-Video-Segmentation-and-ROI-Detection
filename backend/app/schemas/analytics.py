@@ -54,6 +54,11 @@ class VideoAnalytics(BaseModel):
     peak_activity_time: float  # timestamp (s) of maximum motion
     longest_event_duration: float
     longest_event_id: int | None
+    average_event_duration: float  # seconds
+    total_roi_area_pixels: int  # sum of every ROI's (w * h) across the video
+    top_object: str | None  # most frequently detected label, if any
     total_detections: int
     prohibited_detections: int
     object_counts: list[ObjectCount]
+    storage_bytes: int  # on-disk size of the source video file
+    compression_ratio: float | None  # estimated raw (uncompressed) / encoded size
