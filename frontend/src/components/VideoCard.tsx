@@ -61,6 +61,8 @@ export function VideoCard({ video }: { video: Video }) {
                 <Button asChild size="sm" variant="secondary">
                   <Link to={`/videos/${video.id}`}>View results</Link>
                 </Button>
+              ) : video.status === "failed" || video.status === "cancelled" ? (
+                <AnalyzeDialog videoId={video.id} label="Retry" variant="outline" />
               ) : (
                 <AnalyzeDialog videoId={video.id} label="Analyze" />
               )}
