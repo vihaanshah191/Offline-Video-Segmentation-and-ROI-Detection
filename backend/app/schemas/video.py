@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.config import settings
 from app.models.video import VideoStatus
+from app.utils.files import to_relative_url
 
 
 class VideoRead(BaseModel):
@@ -41,6 +43,8 @@ class VideoDetail(VideoRead):
 
     heatmap_path: str | None = None
     thumbnail_path: str | None = None
+    heatmap_url: str | None = None
+    thumbnail_url: str | None = None
     error: str | None = None
     event_count: int = 0
     processing_stats: dict | None = Field(
@@ -73,6 +77,12 @@ class VideoDetail(VideoRead):
         if value is None or isinstance(value, dict):
             return value
         return None
+
+    @model_validator(mode="after")
+    def _compute_urls(self) -> "VideoDetail":
+        self.heatmap_url = to_relative_url(self.heatmap_path, settings.storage_dir)
+        self.thumbnail_url = to_relative_url(self.thumbnail_path, settings.storage_dir)
+        return self
 
 
 class AnalyzeRequest(BaseModel):

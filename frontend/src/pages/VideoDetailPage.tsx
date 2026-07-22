@@ -167,7 +167,7 @@ export function VideoDetailPage() {
             ) : null}
           </div>
           <div className="xl:col-span-2">
-            <HeatmapView videoId={video.id} />
+            <HeatmapView videoId={video.id} videoThumbnailUrl={video.thumbnail_url} />
           </div>
         </div>
       ) : null}

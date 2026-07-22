@@ -47,6 +47,8 @@ export interface ProcessingStats {
 export interface VideoDetail extends Video {
   heatmap_path: string | null;
   thumbnail_path: string | null;
+  heatmap_url: string | null;
+  thumbnail_url: string | null;
   error: string | null;
   event_count: number;
   processing_stats: ProcessingStats | null;

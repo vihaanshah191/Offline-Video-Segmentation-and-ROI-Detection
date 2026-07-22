@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -45,11 +46,22 @@ export function AnalyzeDialog({ videoId, label = "Analyze", variant = "default" 
   const [open, setOpen] = useState(false);
   const [algorithm, setAlgorithm] = useState<MotionAlgorithm>("auto");
   const [objectDetection, setObjectDetection] = useState(true);
+  const [confidence, setConfidence] = useState(0.5);
+  const [classFilter, setClassFilter] = useState("");
   const analyze = useAnalyzeVideo(videoId);
 
   const handleSubmit = () => {
+    const classes = classFilter
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
     analyze.mutate(
-      { motion_algorithm: algorithm, enable_object_detection: objectDetection },
+      {
+        motion_algorithm: algorithm,
+        enable_object_detection: objectDetection,
+        object_detection_confidence: objectDetection ? confidence : null,
+        object_detection_classes: objectDetection && classes.length > 0 ? classes : null,
+      },
       { onSuccess: () => setOpen(false) },
     );
   };
@@ -100,6 +112,44 @@ export function AnalyzeDialog({ videoId, label = "Analyze", variant = "default" 
             </div>
             <Switch checked={objectDetection} onCheckedChange={setObjectDetection} />
           </div>
+
+          {objectDetection ? (
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="confidence-slider">Confidence threshold</Label>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {confidence.toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  id="confidence-slider"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={confidence}
+                  onChange={(e) => setConfidence(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum score to keep a detection. Higher = fewer false positives, more misses.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="class-filter">Object classes (optional)</Label>
+                <Input
+                  id="class-filter"
+                  placeholder="e.g. phone, bag (leave blank for all)"
+                  value={classFilter}
+                  onChange={(e) => setClassFilter(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default model classes: phone, book, bag, person, bottle, laptop.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {analyze.isError ? (

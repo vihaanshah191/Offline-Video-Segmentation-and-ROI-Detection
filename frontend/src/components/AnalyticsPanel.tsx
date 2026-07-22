@@ -1,8 +1,19 @@
-import { Activity, AlertTriangle, Clock, Gauge, Layers, Timer, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  Crop,
+  Gauge,
+  HardDrive,
+  Layers,
+  Tag,
+  Timer,
+  TrendingUp,
+} from "lucide-react";
 
 import { ObjectChart } from "@/components/ObjectChart";
 import { StatCard } from "@/components/StatCard";
-import { formatDuration, formatPercent, formatTimestamp } from "@/lib/utils";
+import { formatBytes, formatDuration, formatPercent, formatTimestamp } from "@/lib/utils";
 import type { Analytics } from "@/types";
 
 export function AnalyticsPanel({ analytics }: { analytics: Analytics }) {
@@ -48,6 +59,32 @@ export function AnalyticsPanel({ analytics }: { analytics: Analytics }) {
           value={analytics.prohibited_detections}
           icon={AlertTriangle}
           accent="rose"
+        />
+        <StatCard
+          label="Avg event duration"
+          value={formatDuration(analytics.average_event_duration)}
+          icon={Timer}
+          accent="violet"
+        />
+        <StatCard
+          label="Total ROI area"
+          value={`${(analytics.total_roi_area_pixels / 1_000_000).toFixed(2)} MP`}
+          icon={Crop}
+          hint={`${analytics.total_roi_area_pixels.toLocaleString()} px²`}
+          accent="primary"
+        />
+        <StatCard
+          label="Top object"
+          value={analytics.top_object ?? "none"}
+          icon={Tag}
+          accent="emerald"
+        />
+        <StatCard
+          label="Storage"
+          value={formatBytes(analytics.storage_bytes)}
+          icon={HardDrive}
+          hint={analytics.compression_ratio ? `~${analytics.compression_ratio}x compressed` : undefined}
+          accent="amber"
         />
       </div>
       <ObjectChart objectCounts={analytics.object_counts} />

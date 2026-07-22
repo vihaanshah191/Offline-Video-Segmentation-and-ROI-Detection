@@ -1,6 +1,8 @@
 import { AlertTriangle, Cpu, HardDrive, Video as VideoIcon, Zap } from "lucide-react";
 
+import { QueuePanel } from "@/components/QueuePanel";
 import { StatCard } from "@/components/StatCard";
+import { SystemPanel } from "@/components/SystemPanel";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoUpload } from "@/components/VideoUpload";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,29 +50,36 @@ export function DashboardPage() {
 
       <VideoUpload />
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Your videos</h2>
-        {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-64 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : videos.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-2 py-14 text-center text-muted-foreground">
-              <VideoIcon className="h-10 w-10 opacity-40" />
-              <p>No videos yet. Upload one above to get started.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {videos.map((video) => (
-              <VideoCard key={video.id} video={video} />
-            ))}
-          </div>
-        )}
-      </section>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section className="space-y-4 xl:col-span-2">
+          <h2 className="text-lg font-semibold">Your videos</h2>
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-64 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : videos.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-2 py-14 text-center text-muted-foreground">
+                <VideoIcon className="h-10 w-10 opacity-40" />
+                <p>No videos yet. Upload one above to get started.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {videos.map((video) => (
+                <VideoCard key={video.id} video={video} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <aside className="space-y-4">
+          <QueuePanel />
+          <SystemPanel system={system} />
+        </aside>
+      </div>
     </div>
   );
 }

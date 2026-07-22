@@ -1,7 +1,7 @@
 """Tests for the SQL-aggregation-based analytics and timeline services."""
 from __future__ import annotations
 
-from app.models.video import Detection, Event, Video, VideoStatus
+from app.models.video import ROI, Detection, Event, Video, VideoStatus
 from app.services.analytics import compute_analytics, compute_timeline
 
 
@@ -106,6 +106,50 @@ def test_prohibited_detections_count(db_session) -> None:
     analytics = compute_analytics(db_session, video)
     assert analytics.total_detections == 2
     assert analytics.prohibited_detections == 1
+
+
+def test_compute_analytics_new_fields(db_session) -> None:
+    video = _make_video(db_session, duration=10.0, width=100, height=100, frame_count=250, size_bytes=1000)
+    e1 = _make_event(db_session, video, start_time=0, end_time=2, duration=2.0)
+    e2 = _make_event(db_session, video, start_time=4, end_time=8, duration=4.0)
+    db_session.add(ROI(event_id=e1.id, x=0, y=0, w=10, h=10, confidence=0.5))
+    db_session.add(ROI(event_id=e2.id, x=0, y=0, w=20, h=5, confidence=0.5))
+    db_session.add(
+        Detection(event_id=e1.id, label="phone", confidence=0.9, prohibited=True, x=0, y=0, w=1, h=1)
+    )
+    db_session.add(
+        Detection(event_id=e1.id, label="phone", confidence=0.8, prohibited=True, x=0, y=0, w=1, h=1)
+    )
+    db_session.add(
+        Detection(event_id=e2.id, label="person", confidence=0.9, prohibited=False, x=0, y=0, w=1, h=1)
+    )
+    db_session.commit()
+
+    analytics = compute_analytics(db_session, video)
+    assert analytics.average_event_duration == 3.0  # (2.0 + 4.0) / 2
+    assert analytics.total_roi_area_pixels == 10 * 10 + 20 * 5  # 200
+    assert analytics.top_object == "phone"  # most frequent label (2 vs 1)
+    assert analytics.storage_bytes == 1000
+    # raw = 100*100*3*250 = 7_500_000; compression_ratio = 7_500_000 / 1000
+    assert analytics.compression_ratio == 7500.0
+
+
+def test_compute_analytics_compression_ratio_none_when_no_size(db_session) -> None:
+    video = _make_video(db_session, size_bytes=0)
+    analytics = compute_analytics(db_session, video)
+    assert analytics.compression_ratio is None
+
+
+def test_compute_timeline_markers_include_severity(db_session) -> None:
+    video = _make_video(db_session, duration=10.0)
+    event = _make_event(db_session, video, start_time=2, end_time=4, duration=2.0, peak_motion_score=0.9)
+    db_session.add(
+        Detection(event_id=event.id, label="phone", confidence=0.9, prohibited=True, heuristic=False, x=0, y=0, w=1, h=1)
+    )
+    db_session.commit()
+
+    timeline = compute_timeline(db_session, video, max_points=20)
+    assert timeline.event_markers[0]["severity"] == "critical"
 
 
 def test_compute_timeline_basic_shape(db_session) -> None:
