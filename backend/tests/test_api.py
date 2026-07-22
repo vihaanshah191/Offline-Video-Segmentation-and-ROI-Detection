@@ -229,6 +229,23 @@ def test_cors_preflight_allows_authorization_header(client: TestClient) -> None:
     assert "authorization" in allowed
 
 
+def test_cors_preflight_allows_put_for_settings(client: TestClient) -> None:
+    """Regression test: PUT /api/settings must survive its CORS preflight.
+    allow_methods previously omitted PUT entirely, so a cross-origin
+    Settings-page save would fail before ever reaching the route."""
+    resp = client.options(
+        f"{API}/settings",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert resp.status_code == 200
+    allowed = resp.headers.get("access-control-allow-methods", "")
+    assert "PUT" in allowed
+
+
 def test_database_file_not_reachable_via_storage_mount(client: TestClient) -> None:
     """Regression test for the critical security fix: the SQLite database
     must never be servable through the public /storage static mount, even via

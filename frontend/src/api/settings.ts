@@ -1,9 +1,14 @@
 import { apiClient } from "./client";
-import type { AuditLogEntry, RuntimeConfig, RuntimeConfigUpdate } from "@/types";
+import type { AuditLogEntry, RuntimeConfig, RuntimeConfigUpdate, SystemCapabilities } from "@/types";
 
 export const settingsApi = {
   async get(): Promise<RuntimeConfig> {
     const { data } = await apiClient.get<RuntimeConfig>("/settings");
+    return data;
+  },
+
+  async capabilities(): Promise<SystemCapabilities> {
+    const { data } = await apiClient.get<SystemCapabilities>("/settings/capabilities");
     return data;
   },
 

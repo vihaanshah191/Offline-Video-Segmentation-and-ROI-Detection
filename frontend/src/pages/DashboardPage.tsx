@@ -1,6 +1,7 @@
 import { AlertTriangle, Cpu, HardDrive, Video as VideoIcon, Zap } from "lucide-react";
 
 import { QueuePanel } from "@/components/QueuePanel";
+import { RecentAnalyses } from "@/components/RecentAnalyses";
 import { StatCard } from "@/components/StatCard";
 import { SystemPanel } from "@/components/SystemPanel";
 import { VideoCard } from "@/components/VideoCard";
@@ -77,6 +78,7 @@ export function DashboardPage() {
 
         <aside className="space-y-4">
           <QueuePanel />
+          <RecentAnalyses videos={videos} />
           <SystemPanel system={system} />
         </aside>
       </div>

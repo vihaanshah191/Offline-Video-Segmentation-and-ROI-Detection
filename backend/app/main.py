@@ -61,17 +61,18 @@ def create_app() -> FastAPI:
     )
 
     # Explicit method/header allow-lists rather than "*" — the frontend only
-    # ever needs GET/POST/DELETE/OPTIONS and a Content-Type/Authorization
+    # ever needs GET/POST/PUT/DELETE/OPTIONS and a Content-Type/Authorization
     # header, so there is no reason to widen the CORS surface further.
-    # "Authorization" is required for the Bearer-token auth flow: without it
-    # in this allow-list, a browser's CORS preflight for any authenticated
-    # cross-origin request fails outright (the request never even reaches
-    # the route) whenever the frontend and backend are on different origins.
+    # "Authorization" is required for the Bearer-token auth flow, and "PUT"
+    # for the settings-update endpoint: without either in these allow-lists,
+    # a browser's CORS preflight for the corresponding cross-origin request
+    # fails outright (the request never even reaches the route) whenever the
+    # frontend and backend are on different origins.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials="*" not in settings.cors_origin_list,
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Accept", "Authorization"],
         expose_headers=["X-Total-Count", "X-Limit", "X-Offset", "X-Process-Time"],
     )

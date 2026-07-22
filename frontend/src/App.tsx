@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
-import { Github, LogOut, ScanEye, ShieldCheck } from "lucide-react";
+import { Github, LogOut, ScanEye, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
 
 import { RequireAuth } from "@/components/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { useAuth, AuthProvider } from "@/hooks/useAuth";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { VideoDetailPage } from "@/pages/VideoDetailPage";
 import { Link } from "react-router-dom";
 
@@ -51,6 +52,13 @@ function Header() {
           </div>
         </Link>
         <div className="flex items-center gap-4">
+          <Link
+            to="/settings"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <SettingsIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Settings</span>
+          </Link>
           <UserMenu />
           <a
             href="https://github.com/vihaanshah191/offline-video-segmentation-and-roi-detection"
@@ -90,6 +98,14 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <VideoDetailPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <RequireAuth>
+                      <SettingsPage />
                     </RequireAuth>
                   }
                 />
