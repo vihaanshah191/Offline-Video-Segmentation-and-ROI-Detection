@@ -188,13 +188,6 @@ class VideoService:
     def get(self, video_id: int) -> Video | None:
         return self.db.get(Video, video_id)
 
-    def list(self, *, status: VideoStatus | None = None) -> list[Video]:
-        """Return all matching videos, newest first (unbounded — internal use)."""
-        stmt = select(Video).order_by(Video.created_at.desc())
-        if status is not None:
-            stmt = stmt.where(Video.status == status)
-        return list(self.db.execute(stmt).scalars().all())
-
     def list_page(
         self, *, status: VideoStatus | None = None, limit: int = 100, offset: int = 0
     ) -> PageResult:

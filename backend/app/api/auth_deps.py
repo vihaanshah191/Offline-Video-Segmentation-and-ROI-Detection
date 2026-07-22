@@ -65,7 +65,7 @@ def get_current_principal(
 
     username = payload.get("sub")
     try:
-        role = UserRole(payload.get("role"))
+        UserRole(payload.get("role"))  # validate the claim; the DB role below is authoritative
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload."
