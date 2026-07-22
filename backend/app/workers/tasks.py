@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.logging_config import get_logger
 from app.database.session import SessionLocal
 from app.models.video import Video, VideoStatus
-from app.services.pipeline import AnalysisPipeline, PipelineConfig
+from app.services.pipeline import AnalysisPipeline, PipelineCancelled, PipelineConfig
 
 logger = get_logger(__name__)
 
@@ -51,6 +51,21 @@ def run_analysis(video_id: int, config: PipelineConfig) -> None:
         summary = pipeline.run(video, db, progress_cb=progress_cb)
         logger.info("Analysis complete for video %s: %s", video_id, summary)
 
+    except PipelineCancelled:
+        logger.info("Analysis cancelled for video %s", video_id)
+        try:
+            db.rollback()
+            video = db.get(Video, video_id)
+            if video is not None:
+                video.status = VideoStatus.CANCELLED
+                video.status_message = "Cancelled by user"
+                video.cancel_requested = False
+                video.error = None
+                db.commit()
+        except Exception:  # noqa: BLE001 - never let cancellation bookkeeping crash the thread
+            logger.exception(
+                "Failed to persist CANCELLED status for video %s after cancellation", video_id
+            )
     except Exception as exc:  # noqa: BLE001 - record and swallow
         logger.exception("Analysis failed for video %s", video_id)
         try:

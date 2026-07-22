@@ -115,6 +115,18 @@ export function useAnalyzeVideo(id: number) {
   });
 }
 
+export function useCancelVideo(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => videosApi.cancel(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.video(id) });
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      qc.invalidateQueries({ queryKey: queryKeys.globalStats });
+    },
+  });
+}
+
 export function useDeleteVideo() {
   const qc = useQueryClient();
   return useMutation({

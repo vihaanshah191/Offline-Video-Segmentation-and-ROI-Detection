@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 
 import cv2
 import numpy as np
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -54,6 +55,12 @@ ProgressCallback = Callable[[float, str], None]
 # glitchy frames from a marginal codec) and analysis aborts with a clear error
 # instead of silently producing a near-empty, misleading result.
 MAX_CONSECUTIVE_FRAME_ERRORS = 30
+
+
+class PipelineCancelled(Exception):
+    """Raised internally when a user-requested cancellation is observed
+    mid-run. Caught by :func:`app.workers.tasks.run_analysis`, which records
+    ``VideoStatus.CANCELLED`` rather than treating this as a failure."""
 
 
 @dataclass(slots=True)
@@ -208,6 +215,24 @@ class AnalysisPipeline:
         db.commit()
         return stats
 
+    @staticmethod
+    def _check_cancelled(db: Session, video_id: int) -> None:
+        """Raise :class:`PipelineCancelled` if the user requested cancellation.
+
+        Python threads cannot be forcibly killed, so cancellation is
+        cooperative: the API sets ``Video.cancel_requested`` on its own DB
+        session/connection, and this thread polls for it. A plain column
+        ``select`` (rather than touching the ORM-identity-mapped ``video``
+        object already loaded in this session) is used so the read isn't
+        served from a stale in-memory copy — it always reflects the latest
+        committed value from the other session.
+        """
+        flag = db.execute(
+            select(Video.cancel_requested).where(Video.id == video_id)
+        ).scalar_one_or_none()
+        if flag:
+            raise PipelineCancelled(f"Analysis cancelled by user for video {video_id}")
+
     def _run_inner(self, video: Video, db: Session, report: ProgressCallback) -> dict:
         """The actual pipeline body, timed by :meth:`run`."""
         video_path = video.path
@@ -278,9 +303,11 @@ class AnalysisPipeline:
                             ) from exc
 
                     processed += 1
-                    if total_frames and processed % 50 == 0:
-                        pct = 2.0 + 68.0 * (frame_index / max(1, total_frames))
-                        report(min(70.0, pct), "Analysing motion")
+                    if processed % 50 == 0:
+                        self._check_cancelled(db, video.id)
+                        if total_frames:
+                            pct = 2.0 + 68.0 * (frame_index / max(1, total_frames))
+                            report(min(70.0, pct), "Analysing motion")
             finally:
                 reader.join()
         motion_timer_stats = {
@@ -324,6 +351,7 @@ class AnalysisPipeline:
         if extract_thumbnail(video_path, video_thumb, timestamp=thumb_time):
             video.thumbnail_path = str(video_thumb)
 
+        self._check_cancelled(db, video.id)
         report(78.0, "Building clips and detecting objects")
         with LogTimer(logger, "event_materialisation", item_count=len(segments), item_label="events"):
             self._materialise_events(video, db, samples, segments, width, height, report)

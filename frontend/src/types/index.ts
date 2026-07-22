@@ -6,7 +6,8 @@ export type VideoStatus =
   | "queued"
   | "processing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export type MotionAlgorithm = "mog2" | "frame_diff" | "optical_flow" | "auto";
 

@@ -137,6 +137,33 @@ class Settings(BaseSettings):
     # Bounded read-ahead queue depth for the decode/process pipeline. Bounds
     # memory growth if CV processing falls behind frame decoding.
     frame_buffer_size: int = Field(default=64, ge=1, le=4096)
+    # Maximum number of analysis jobs the thread backend will run
+    # concurrently; further POST /analyze calls are accepted (video moves to
+    # `queued`) but wait for a slot rather than starting immediately. Keeps
+    # CPU-bound OpenCV work from being oversubscribed on a busy instance.
+    # Has no effect on the `celery` backend (Celery's own concurrency
+    # settings apply there instead).
+    max_concurrent_analyses: int = Field(default=2, ge=1, le=64)
+
+    # -------------------------------------------------------------------- auth
+    # Off by default: the existing API contract, test suite and demo flow are
+    # all unauthenticated, and this upgrade must not break any of that. When
+    # enabled, every mutating endpoint (upload/analyze/delete/cancel/settings)
+    # requires a valid bearer token; read endpoints remain open to any
+    # authenticated user regardless of role. See SYSTEM_DESIGN.md.
+    auth_enabled: bool = False
+    jwt_secret_key: str = "insecure-default-change-me"
+    jwt_algorithm: str = "HS256"
+    # Session timeout: how long an issued token remains valid.
+    jwt_expiry_minutes: int = Field(default=30, ge=1, le=1440)
+    # Seed admin account, created on first startup with auth enabled if no
+    # users exist yet. Change the password via .env before enabling auth in
+    # anything beyond a local demo.
+    admin_username: str = "admin"
+    admin_password: str = "changeme123"
+
+    # ------------------------------------------------------------------- demo
+    demo_mode_enabled: bool = True
 
     # --------------------------------------------------------------- validators
     @field_validator("default_motion_algorithm")
@@ -173,6 +200,21 @@ class Settings(BaseSettings):
             raise ValueError(
                 "cors_origins must not mix '*' with explicit origins; use '*' alone "
                 "(and only for local/dev use) or an explicit allow-list."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_auth_secret(self) -> Settings:
+        if self.auth_enabled and self.jwt_secret_key == "insecure-default-change-me":
+            raise ValueError(
+                "AUTH_ENABLED=true but JWT_SECRET_KEY is still the insecure placeholder. "
+                "Set a real secret (e.g. `openssl rand -hex 32`) via the JWT_SECRET_KEY "
+                "environment variable before enabling authentication."
+            )
+        if self.auth_enabled and self.admin_password == "changeme123":  # noqa: S105
+            raise ValueError(
+                "AUTH_ENABLED=true but ADMIN_PASSWORD is still the insecure placeholder. "
+                "Set a real password via the ADMIN_PASSWORD environment variable."
             )
         return self
 

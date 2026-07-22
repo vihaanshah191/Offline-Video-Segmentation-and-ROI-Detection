@@ -19,7 +19,8 @@ from app.api import api_router
 from app.core.config import settings
 from app.core.logging_config import configure_logging, get_logger
 from app.core.rate_limit import RateLimitMiddleware
-from app.database.session import init_db
+from app.database.session import SessionLocal, init_db
+from app.services.auth_service import AuthService
 from app.services.video_service import VideoValidationError
 
 configure_logging(settings.log_level, log_format=settings.log_format)
@@ -28,9 +29,16 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise storage directories and database schema on startup."""
+    """Initialise storage directories, database schema, and (if auth is
+    enabled) the seed admin account on startup."""
     settings.ensure_directories()
     init_db()
+    if settings.auth_enabled:
+        db = SessionLocal()
+        try:
+            AuthService(db).ensure_seed_admin(settings.admin_username, settings.admin_password)
+        finally:
+            db.close()
     logger.info("%s v%s started", settings.app_name, settings.app_version)
     yield
     logger.info("Shutting down")

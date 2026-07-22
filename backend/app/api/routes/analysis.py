@@ -1,13 +1,17 @@
 """Analysis trigger endpoint."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
+from app.api.auth_deps import Principal, require_permission
 from app.api.deps import get_video_or_404, get_video_service, to_video_detail
 from app.core.config import settings
 from app.core.logging_config import get_logger
+from app.database.session import get_db
 from app.models.video import Video
 from app.schemas.video import AnalyzeRequest, VideoDetail
+from app.services.auth_service import AuthService
 from app.services.motion_detection import SUPPORTED_REQUEST_VALUES
 from app.services.pipeline import PipelineConfig
 from app.services.video_service import VideoService
@@ -15,6 +19,10 @@ from app.workers.tasks import enqueue_analysis
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["analysis"])
+
+
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
 
 
 @router.post(
@@ -25,9 +33,12 @@ router = APIRouter(tags=["analysis"])
     response_description="The video, now in a 'queued' state.",
 )
 def analyze_video(
+    http_request: Request,
     request: AnalyzeRequest | None = None,
     video: Video = Depends(get_video_or_404),
     service: VideoService = Depends(get_video_service),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_permission("analyze")),
 ) -> VideoDetail:
     """Queue an offline analysis run for the given video.
 
@@ -37,6 +48,7 @@ def analyze_video(
     ``motion_algorithm: "auto"`` pre-scans the video and picks whichever
     concrete algorithm (mog2/frame_diff/optical_flow) best fits its lighting
     and noise characteristics; the resolved choice is recorded on the video.
+    Requires the ``analyze`` permission when ``AUTH_ENABLED=true``.
     """
     req = request or AnalyzeRequest()
 
@@ -64,5 +76,12 @@ def analyze_video(
         min_motion_area=req.min_motion_area,
     )
     enqueue_analysis(video.id, config)
+    AuthService(db).record_audit(
+        action="analyze",
+        username=principal.username,
+        resource=f"video:{video.id}",
+        ip_address=_client_ip(http_request),
+        detail=req.motion_algorithm,
+    )
 
     return to_video_detail(video, service)

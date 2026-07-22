@@ -20,6 +20,24 @@ ultralytics==8.3.58
 # --- Reporting -------------------------------------------------------------
 reportlab==4.2.5
 
+# --- System monitoring (CPU/memory for analytics + dashboard) --------------
+psutil==6.1.1
+
+# --- Authentication ----------------------------------------------------------
+# Plain `bcrypt` rather than passlib: passlib 1.7.x is unmaintained and
+# incompatible with bcrypt>=4.1 (raises on hash/verify — see
+# https://github.com/pyca/bcrypt/issues/684). Using bcrypt's own API directly
+# avoids the dependency entirely.
+#
+# JWT is hand-rolled (HS256 only, stdlib hmac/hashlib) in app/core/security.py
+# rather than depending on PyJWT: this app only ever needs symmetric HS256
+# signing, and PyJWT probes for the optional `cryptography` package (for
+# RSA/EC algorithms this app never uses) at import time — on a system with a
+# broken/mismatched `cryptography` install (a compiled Rust extension) that
+# probe can crash before any of this code runs, for a dependency this app
+# doesn't actually need. See the module docstring for the full rationale.
+bcrypt==4.2.1
+
 # --- Optional distributed workers -----------------------------------------
 celery==5.4.0
 redis==5.2.1

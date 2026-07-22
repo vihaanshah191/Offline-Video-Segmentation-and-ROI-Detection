@@ -77,6 +77,10 @@ export const videosApi = {
     await apiClient.delete(`/video/${id}`);
   },
 
+  async cancel(id: number): Promise<void> {
+    await apiClient.post(`/video/${id}/cancel`);
+  },
+
   async events(id: number, query: EventQuery = {}): Promise<Page<EventRecord>> {
     const limit = query.limit ?? 200;
     const { data, headers } = await apiClient.get<EventRecord[]>(`/events/${id}`, {

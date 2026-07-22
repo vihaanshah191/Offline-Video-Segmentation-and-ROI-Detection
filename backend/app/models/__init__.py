@@ -1,4 +1,6 @@
 """ORM models package."""
+from app.models.auth import AuditLog, ROLE_PERMISSIONS, User, UserRole
+from app.models.runtime_config import RuntimeConfig
 from app.models.video import (
     ROI,
     Detection,
@@ -7,4 +9,15 @@ from app.models.video import (
     VideoStatus,
 )
 
-__all__ = ["Detection", "Event", "ROI", "Video", "VideoStatus"]
+__all__ = [
+    "ROI",
+    "ROLE_PERMISSIONS",
+    "AuditLog",
+    "Detection",
+    "Event",
+    "RuntimeConfig",
+    "User",
+    "UserRole",
+    "Video",
+    "VideoStatus",
+]

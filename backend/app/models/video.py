@@ -46,6 +46,7 @@ class VideoStatus(str, enum.Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class Video(Base):
@@ -93,6 +94,14 @@ class Video(Base):
     # type) for SQLite/Postgres portability; parsed on the way out by the API
     # layer.
     processing_stats: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Cooperative cancellation flag: set by POST /video/{id}/cancel while a
+    # video is queued/processing; the pipeline polls it periodically (every
+    # ~50 frames in the motion pass, and before starting each event's
+    # object-detection/clip work) and raises AnalysisCancelled cleanly rather
+    # than being killed. Python threads cannot be forcibly terminated, so
+    # this poll-and-raise pattern is the only safe way to support "Cancel"
+    # with the thread-based worker.
+    cancel_requested: Mapped[bool] = mapped_column(default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)

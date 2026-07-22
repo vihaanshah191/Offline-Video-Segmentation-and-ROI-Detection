@@ -7,6 +7,7 @@ const MAP: Record<VideoStatus, { label: string; variant: "default" | "secondary"
   processing: { label: "Processing", variant: "warning" },
   completed: { label: "Completed", variant: "success" },
   failed: { label: "Failed", variant: "destructive" },
+  cancelled: { label: "Cancelled", variant: "secondary" },
 };
 
 export function StatusBadge({ status }: { status: VideoStatus }) {

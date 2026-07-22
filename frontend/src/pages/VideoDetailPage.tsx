@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, FileText, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FileText, Loader2, XCircle } from "lucide-react";
 
 import { resolveStorageUrl } from "@/api/client";
 import { videosApi } from "@/api/videos";
@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAnalytics, useEvents, useTimeline, useVideo } from "@/hooks/useVideos";
+import { useAnalytics, useCancelVideo, useEvents, useTimeline, useVideo } from "@/hooks/useVideos";
 import { formatDuration } from "@/lib/utils";
 
 export function VideoDetailPage() {
@@ -33,6 +33,7 @@ export function VideoDetailPage() {
   const events = eventsPage?.items ?? [];
   const { data: timeline } = useTimeline(videoId, completed);
   const { data: analytics } = useAnalytics(videoId, completed);
+  const cancelMutation = useCancelVideo(videoId);
 
   const seekTo = useCallback((time: number) => {
     const el = videoRef.current;
@@ -84,7 +85,7 @@ export function VideoDetailPage() {
               </Button>
               <AnalyzeDialog videoId={video.id} label="Re-analyze" variant="outline" />
             </>
-          ) : !processing ? (
+          ) : !processing && video.status !== "cancelled" ? (
             <AnalyzeDialog videoId={video.id} label="Analyze" />
           ) : null}
         </div>
@@ -114,9 +115,35 @@ export function VideoDetailPage() {
               <span className="ml-auto font-mono text-sm">{video.progress.toFixed(0)}%</span>
             </div>
             <Progress value={video.progress} />
-            <p className="text-sm text-muted-foreground">
-              Analysis runs offline; this page updates automatically.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Analysis runs offline; this page updates automatically.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate()}
+              >
+                <XCircle className="h-4 w-4" />
+                {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {video.status === "cancelled" ? (
+        <Card>
+          <CardContent className="flex items-center gap-3 py-6 text-muted-foreground">
+            <XCircle className="h-5 w-5" />
+            <div>
+              <p className="font-medium text-foreground">Analysis cancelled</p>
+              <p className="text-sm">Cancelled by user before completion.</p>
+            </div>
+            <div className="ml-auto">
+              <AnalyzeDialog videoId={video.id} label="Retry" variant="outline" />
+            </div>
           </CardContent>
         </Card>
       ) : null}

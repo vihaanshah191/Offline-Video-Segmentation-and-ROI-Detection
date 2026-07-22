@@ -252,6 +252,34 @@ class VideoService:
             self.db.refresh(video)
         return won
 
+    def request_cancel(self, video: Video) -> bool:
+        """Set the cooperative-cancellation flag iff the video is currently
+        queued or processing.
+
+        Analysis runs in a daemon thread that cannot be forcibly killed, so
+        this only *requests* cancellation — the pipeline polls
+        ``cancel_requested`` and stops at its next checkpoint (see
+        ``AnalysisPipeline._check_cancelled``), then the worker sets the
+        video's status to ``CANCELLED``. Uses the same atomic
+        conditional-``UPDATE`` pattern as :meth:`try_mark_queued` to avoid a
+        TOCTOU race against a run that finishes/fails at the same moment.
+
+        Returns:
+            ``True`` if a cancellable run was found and flagged; ``False``
+            if the video wasn't queued/processing (nothing to cancel).
+        """
+        cancellable_statuses = (VideoStatus.QUEUED, VideoStatus.PROCESSING)
+        result = self.db.execute(
+            update(Video)
+            .where(Video.id == video.id, Video.status.in_(cancellable_statuses))
+            .values(cancel_requested=True)
+        )
+        self.db.commit()
+        won = result.rowcount == 1
+        if won:
+            self.db.refresh(video)
+        return won
+
     def mark_status(
         self,
         video: Video,
