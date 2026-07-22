@@ -4,9 +4,11 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from fastapi import UploadFile
 from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -281,15 +283,18 @@ class VideoService:
             queued/processing (caller should reject with 409).
         """
         busy_statuses = (VideoStatus.QUEUED, VideoStatus.PROCESSING)
-        result = self.db.execute(
-            update(Video)
-            .where(Video.id == video.id, Video.status.not_in(busy_statuses))
-            .values(
-                status=VideoStatus.QUEUED,
-                progress=0.0,
-                status_message="Queued for analysis",
-                error=None,
-            )
+        result = cast(
+            CursorResult,
+            self.db.execute(
+                update(Video)
+                .where(Video.id == video.id, Video.status.not_in(busy_statuses))
+                .values(
+                    status=VideoStatus.QUEUED,
+                    progress=0.0,
+                    status_message="Queued for analysis",
+                    error=None,
+                )
+            ),
         )
         self.db.commit()
         won = result.rowcount == 1
@@ -314,10 +319,13 @@ class VideoService:
             if the video wasn't queued/processing (nothing to cancel).
         """
         cancellable_statuses = (VideoStatus.QUEUED, VideoStatus.PROCESSING)
-        result = self.db.execute(
-            update(Video)
-            .where(Video.id == video.id, Video.status.in_(cancellable_statuses))
-            .values(cancel_requested=True)
+        result = cast(
+            CursorResult,
+            self.db.execute(
+                update(Video)
+                .where(Video.id == video.id, Video.status.in_(cancellable_statuses))
+                .values(cancel_requested=True)
+            ),
         )
         self.db.commit()
         won = result.rowcount == 1

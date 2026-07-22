@@ -60,6 +60,10 @@ def _run_analysis_locked(video_id: int, config: PipelineConfig) -> None:
         db.commit()
 
         def progress_cb(pct: float, message: str) -> None:
+            # mypy can't carry the `video is not None` narrowing above into a
+            # nested closure (the variable could in principle be reassigned
+            # before the closure runs); it never is here.
+            assert video is not None
             video.progress = round(pct, 2)
             video.status_message = message
             db.commit()

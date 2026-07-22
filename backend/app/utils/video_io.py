@@ -180,7 +180,7 @@ def _cut_clip_opencv(
         fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter.fourcc(*"mp4v")
         writer = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
 
         cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000.0)

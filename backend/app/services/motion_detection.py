@@ -132,12 +132,11 @@ class MotionDetector:
         self._kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
         self._kernel_initialised = bool(frame_width and frame_height)
 
+        self._bg: cv2.BackgroundSubtractorMOG2 | None = None
         if algorithm == MOG2:
             self._bg = cv2.createBackgroundSubtractorMOG2(
                 history=500, varThreshold=24, detectShadows=True
             )
-        else:
-            self._bg = None
 
     # ------------------------------------------------------------------ public
     @property
@@ -185,6 +184,7 @@ class MotionDetector:
         return cv2.GaussianBlur(gray, (self.blur_ksize, self.blur_ksize), 0)
 
     def _process_mog2(self, gray: np.ndarray) -> np.ndarray:
+        assert self._bg is not None  # only called when algorithm == MOG2
         fg = self._bg.apply(gray)
         # MOG2 marks shadows as 127; keep only strong foreground. Otsu's method
         # adapts the cutoff to the actual bimodal distribution of this frame's
@@ -223,7 +223,7 @@ class MotionDetector:
         flow = cv2.calcOpticalFlowFarneback(
             self._prev_gray,
             gray,
-            None,
+            np.zeros((*gray.shape[:2], 2), dtype=np.float32),
             pyr_scale=0.5,
             levels=3,
             winsize=15,
