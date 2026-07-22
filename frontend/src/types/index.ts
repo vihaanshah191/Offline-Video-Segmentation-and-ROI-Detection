@@ -192,3 +192,29 @@ export interface PageInfo {
   limit: number;
   offset: number;
 }
+
+export type UserRole = "admin" | "investigator" | "viewer";
+
+export interface SystemCapabilities {
+  yolo_model: string;
+  yolo_device: string;
+  task_backend: string;
+  max_upload_mb: number;
+  allowed_extensions: string[];
+  auth_enabled: boolean;
+  demo_mode_enabled: boolean;
+}
+
+export interface CurrentUser {
+  username: string | null;
+  role: UserRole;
+  auth_enabled: boolean;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  username: string;
+  role: UserRole;
+}

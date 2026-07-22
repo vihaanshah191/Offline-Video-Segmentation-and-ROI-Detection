@@ -210,6 +210,25 @@ def test_auto_algorithm_end_to_end(client: TestClient, sample_video_path: Path) 
     client.delete(f"{API}/video/{video_id}")
 
 
+def test_cors_preflight_allows_authorization_header(client: TestClient) -> None:
+    """Regression test: a browser's CORS preflight for a cross-origin,
+    Bearer-authenticated request must succeed. This previously failed
+    (silently, from the app's point of view — the request never even
+    reached a route) because the CORS middleware's allow_headers list
+    only had Content-Type/Accept, not Authorization."""
+    resp = client.options(
+        f"{API}/videos",
+        headers={
+            "Origin": "http://localhost:5173",  # default cors_origins entry
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert resp.status_code == 200
+    allowed = resp.headers.get("access-control-allow-headers", "").lower()
+    assert "authorization" in allowed
+
+
 def test_database_file_not_reachable_via_storage_mount(client: TestClient) -> None:
     """Regression test for the critical security fix: the SQLite database
     must never be servable through the public /storage static mount, even via
