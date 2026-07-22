@@ -31,12 +31,21 @@ jobs:
 
       - name: Install dependencies
         # Install the light runtime subset needed for tests. Object detection
-        # (torch/ultralytics) is disabled in CI and degrades gracefully.
+        # (torch/ultralytics) and the Celery backend (celery/redis) are
+        # disabled/unavailable in CI and both degrade gracefully — but
+        # bcrypt and psutil are NOT optional: app/core/security.py imports
+        # bcrypt unconditionally at module level (needed for password
+        # hashing regardless of whether AUTH_ENABLED is set), and it's
+        # imported transitively by every route via auth_deps.py, so its
+        # absence breaks collecting the entire test suite, not just
+        # auth-specific tests. psutil is imported lazily (wrapped in its own
+        # try/except in health.py) so it degrades gracefully on its own, but
+        # is installed here anyway so CI actually exercises that code path.
         run: |
           python -m pip install --upgrade pip
           pip install fastapi "uvicorn[standard]" python-multipart pydantic \
             pydantic-settings SQLAlchemy opencv-python-headless numpy reportlab \
-            pytest pytest-cov httpx ruff mypy
+            bcrypt psutil pytest pytest-cov httpx ruff mypy
 
       - name: Ruff lint
         run: ruff check app tests

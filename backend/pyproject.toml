@@ -26,7 +26,15 @@ ignore = [
 "app/**/__init__.py" = ["F401"]  # Re-exports are intentional.
 
 [tool.mypy]
-python_version = "3.11"
+# Matches CI's actual interpreter (python-version: "3.12" in
+# .github/workflows/ci.yml), not just the app's minimum supported version
+# (requires-python above). Modern numpy's bundled .pyi stubs use PEP 695
+# `type` statement syntax, which mypy refuses to parse as a hard syntax
+# error when python_version is set below 3.12 — this crashed the CI mypy
+# step entirely (one error, "errors prevented further checking") regardless
+# of the app's own code, on every commit before this one that pulled in a
+# numpy release recent enough to use that syntax in its stubs.
+python_version = "3.12"
 ignore_missing_imports = true
 warn_unused_ignores = false
 disallow_untyped_defs = false

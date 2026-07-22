@@ -64,6 +64,8 @@ def get_current_principal(
         )
 
     username = payload.get("sub")
+    if not isinstance(username, str) or not username:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
     try:
         UserRole(payload.get("role"))  # validate the claim; the DB role below is authoritative
     except ValueError:

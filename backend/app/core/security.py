@@ -25,7 +25,7 @@ import base64
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 
@@ -76,7 +76,7 @@ def create_access_token(username: str, role: str) -> tuple[str, datetime]:
     a client must re-authenticate once the token expires; there is no
     server-side session store to invalidate, keeping the API stateless.
     """
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expiry_minutes)
+    expires_at = datetime.now(UTC) + timedelta(minutes=settings.jwt_expiry_minutes)
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {"sub": username, "role": role, "exp": int(expires_at.timestamp())}
 
@@ -108,7 +108,7 @@ def decode_access_token(token: str) -> dict | None:
 
         payload = json.loads(_b64url_decode(payload_b64))
         exp = payload.get("exp")
-        if exp is None or datetime.now(timezone.utc).timestamp() > exp:
+        if exp is None or datetime.now(UTC).timestamp() > exp:
             raise InvalidTokenError("expired")
 
         return payload

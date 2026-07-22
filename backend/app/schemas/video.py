@@ -79,7 +79,7 @@ class VideoDetail(VideoRead):
         return None
 
     @model_validator(mode="after")
-    def _compute_urls(self) -> "VideoDetail":
+    def _compute_urls(self) -> VideoDetail:
         self.heatmap_url = to_relative_url(self.heatmap_path, settings.storage_dir)
         self.thumbnail_url = to_relative_url(self.thumbnail_path, settings.storage_dir)
         return self
@@ -109,7 +109,9 @@ class AnalyzeRequest(BaseModel):
         default=None,
         ge=0.0,
         le=1.0,
-        description="Minimum YOLO confidence to keep a detection (overrides the server default for this run).",
+        description=(
+            "Minimum YOLO confidence to keep a detection (overrides the server default for this run)."
+        ),
     )
     object_detection_classes: list[str] | None = Field(
         default=None,

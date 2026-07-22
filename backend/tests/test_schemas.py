@@ -3,7 +3,7 @@ filesystem-path -> served-URL conversions on EventRead/VideoDetail."""
 from __future__ import annotations
 
 from app.core.config import settings
-from app.models.video import Detection, Event, ROI, Video, VideoStatus
+from app.models.video import Detection, Event, Video, VideoStatus
 from app.schemas.event import EventRead
 from app.schemas.video import VideoDetail
 

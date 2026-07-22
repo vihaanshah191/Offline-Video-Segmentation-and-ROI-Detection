@@ -28,10 +28,12 @@ def extension_of(name: str) -> str:
     return Path(name).suffix.lower().lstrip(".")
 
 
-def to_relative_url(path: str | Path, storage_root: Path, mount: str = "/storage") -> str | None:
+def to_relative_url(path: str | Path | None, storage_root: Path, mount: str = "/storage") -> str | None:
     """Convert an absolute storage path to a served URL path.
 
-    Returns ``None`` if ``path`` is falsy.
+    Returns ``None`` if ``path`` is falsy (including ``None`` — every
+    caller passes an optional DB column straight through, so accepting
+    ``None`` here is the actual contract, not just a defensive check).
     """
     if not path:
         return None

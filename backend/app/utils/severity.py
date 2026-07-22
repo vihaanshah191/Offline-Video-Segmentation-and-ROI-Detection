@@ -6,7 +6,8 @@ never disagree about how serious one looks.
 """
 from __future__ import annotations
 
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from typing import Protocol
 
 # A peak motion score at or above this (0..1, already normalized) is
 # considered unusually high activity even with no object detection to back

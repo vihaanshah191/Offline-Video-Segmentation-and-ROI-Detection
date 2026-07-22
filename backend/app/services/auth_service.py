@@ -1,7 +1,7 @@
 """User authentication and audit-log service."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ class AuthService:
             return None
         if not verify_password(password, user.password_hash):
             return None
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.now(UTC)
         self.db.commit()
         return user
 

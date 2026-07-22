@@ -50,7 +50,7 @@ class HeatmapAccumulator:
 
         norm = self._accum / self._accum.max()
         norm = np.power(norm, 0.6)  # gamma boost so low activity stays visible
-        heat_u8 = np.uint8(np.clip(norm * 255, 0, 255))
+        heat_u8 = np.clip(norm * 255, 0, 255).astype(np.uint8)
         heat_u8 = cv2.GaussianBlur(heat_u8, (0, 0), sigmaX=5, sigmaY=5)
         colored = cv2.applyColorMap(heat_u8, cv2.COLORMAP_JET)
 
@@ -64,7 +64,7 @@ class HeatmapAccumulator:
         blended = base.astype(np.float32) * (1 - alpha * mask) + colored.astype(
             np.float32
         ) * (alpha * mask)
-        return np.uint8(np.clip(blended, 0, 255))
+        return np.clip(blended, 0, 255).astype(np.uint8)
 
     def save(self, output_path: str | Path, alpha: float = 0.6) -> bool:
         """Render and write the heatmap PNG. Returns success flag."""

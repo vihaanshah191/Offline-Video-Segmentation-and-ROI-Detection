@@ -144,7 +144,10 @@ def test_compute_timeline_markers_include_severity(db_session) -> None:
     video = _make_video(db_session, duration=10.0)
     event = _make_event(db_session, video, start_time=2, end_time=4, duration=2.0, peak_motion_score=0.9)
     db_session.add(
-        Detection(event_id=event.id, label="phone", confidence=0.9, prohibited=True, heuristic=False, x=0, y=0, w=1, h=1)
+        Detection(
+            event_id=event.id, label="phone", confidence=0.9, prohibited=True, heuristic=False,
+            x=0, y=0, w=1, h=1,
+        )
     )
     db_session.commit()
 

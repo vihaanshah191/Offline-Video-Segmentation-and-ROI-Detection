@@ -109,7 +109,9 @@ def compute_analytics(db: Session, video: Video) -> VideoAnalytics:
     # uncompressed RGB frame data versus the actual on-disk file size. Not
     # exact (containers/codecs vary), but a stable, explainable estimate.
     raw_size = (video.width or 0) * (video.height or 0) * 3 * (video.frame_count or 0)
-    compression_ratio = round(raw_size / video.size_bytes, 1) if video.size_bytes > 0 and raw_size > 0 else None
+    compression_ratio = (
+        round(raw_size / video.size_bytes, 1) if video.size_bytes > 0 and raw_size > 0 else None
+    )
 
     return VideoAnalytics(
         video_id=video_id,

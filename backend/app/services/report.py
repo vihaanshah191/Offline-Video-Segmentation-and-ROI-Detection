@@ -267,11 +267,21 @@ def build_pdf_report(db: Session, video: Video) -> bytes:
     if video.heatmap_path and Path(video.heatmap_path).exists():
         _section("Motion Heatmap")
         story.append(Paragraph("Accumulated motion intensity across the entire recording.", body_style))
-        story.append(Image(video.heatmap_path, width=140 * mm, height=140 * mm * video.height / max(1, video.width)))
+        story.append(
+            Image(
+                video.heatmap_path,
+                width=140 * mm,
+                height=140 * mm * video.height / max(1, video.width),
+            )
+        )
 
     # ------------------------------------------------------- event snapshot
     significant_event = max(events, key=lambda e: e.peak_motion_score, default=None)
-    if significant_event and significant_event.thumbnail_path and Path(significant_event.thumbnail_path).exists():
+    if (
+        significant_event is not None
+        and significant_event.thumbnail_path
+        and Path(significant_event.thumbnail_path).exists()
+    ):
         _section("Most Significant Event Snapshot")
         story.append(
             Paragraph(

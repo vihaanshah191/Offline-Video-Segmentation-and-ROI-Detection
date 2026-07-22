@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shutil
+import time
 from pathlib import Path
 
 from app.core.config import settings
@@ -88,9 +89,10 @@ def test_pdf_report_endpoint_returns_pdf(client, sample_video_path: Path) -> Non
         )
     video_id = upload.json()["id"]
 
-    import time
-
-    client.post(f"/api/analyze/{video_id}", json={"motion_algorithm": "mog2", "enable_object_detection": False})
+    client.post(
+        f"/api/analyze/{video_id}",
+        json={"motion_algorithm": "mog2", "enable_object_detection": False},
+    )
     for _ in range(120):
         detail = client.get(f"/api/video/{video_id}").json()
         if detail["status"] in ("completed", "failed"):

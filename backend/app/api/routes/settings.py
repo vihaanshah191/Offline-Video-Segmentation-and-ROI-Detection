@@ -37,7 +37,9 @@ def update_settings(
     return RuntimeConfigRead.model_validate(updated)
 
 
-@router.post("/reset", response_model=RuntimeConfigRead, summary="Reset analysis defaults to environment defaults")
+@router.post(
+    "/reset", response_model=RuntimeConfigRead, summary="Reset analysis defaults to environment defaults"
+)
 def reset_settings(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_permission("manage_users")),

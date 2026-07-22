@@ -10,7 +10,7 @@ operator explicitly opts in. See ``SYSTEM_DESIGN.md`` for the rationale.
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import CheckConstraint, DateTime, Enum, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,7 +19,7 @@ from app.database.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class UserRole(str, enum.Enum):

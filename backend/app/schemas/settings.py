@@ -22,7 +22,9 @@ class RuntimeConfigRead(BaseModel):
 class RuntimeConfigUpdate(BaseModel):
     """All fields optional: only provided fields are changed."""
 
-    default_motion_algorithm: str | None = Field(default=None, description="mog2 | frame_diff | optical_flow | auto")
+    default_motion_algorithm: str | None = Field(
+        default=None, description="mog2 | frame_diff | optical_flow | auto"
+    )
     motion_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     min_motion_area: int | None = Field(default=None, ge=1)
     frame_sample_step: int | None = Field(default=None, ge=1, le=60)

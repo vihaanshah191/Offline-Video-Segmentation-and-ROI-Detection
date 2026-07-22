@@ -77,7 +77,7 @@ class EventRead(BaseModel):
         return [o for o in self.objects.split(",") if o]
 
     @model_validator(mode="after")
-    def _compute_derived_fields(self) -> "EventRead":
+    def _compute_derived_fields(self) -> EventRead:
         self.severity = compute_severity(self.peak_motion_score, self.detections)
         self.clip_url = to_relative_url(self.clip_path, settings.storage_dir)
         self.thumbnail_url = to_relative_url(self.thumbnail_path, settings.storage_dir)

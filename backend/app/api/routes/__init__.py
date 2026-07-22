@@ -10,9 +10,11 @@ from app.api.routes import (
     health,
     heatmap,
     reports,
-    settings as settings_routes,
     timeline,
     videos,
+)
+from app.api.routes import (
+    settings as settings_routes,
 )
 
 api_router = APIRouter()
