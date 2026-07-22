@@ -75,6 +75,10 @@ def test_pipeline_creates_events_and_heatmap(db_session, sample_video_path: Path
     # Heatmap PNG must be generated.
     assert video.heatmap_path is not None and Path(video.heatmap_path).exists()
 
+    # Per-event heatmaps must also be generated (each event has ROIs, so
+    # each should produce a heatmap file too).
+    assert first.heatmap_path is not None and Path(first.heatmap_path).exists()
+
 
 def test_pipeline_frame_diff_algorithm(db_session, sample_video_path: Path) -> None:
     video = _register_video(db_session, sample_video_path)

@@ -61,8 +61,10 @@ class EventRead(BaseModel):
     objects: str
     clip_path: str | None
     thumbnail_path: str | None
+    heatmap_path: str | None = None
     clip_url: str | None = None
     thumbnail_url: str | None = None
+    heatmap_url: str | None = None
     rois: list[ROIRead] = []
     detections: list[DetectionRead] = []
     severity: str = Field(
@@ -79,4 +81,5 @@ class EventRead(BaseModel):
         self.severity = compute_severity(self.peak_motion_score, self.detections)
         self.clip_url = to_relative_url(self.clip_path, settings.storage_dir)
         self.thumbnail_url = to_relative_url(self.thumbnail_path, settings.storage_dir)
+        self.heatmap_url = to_relative_url(self.heatmap_path, settings.storage_dir)
         return self

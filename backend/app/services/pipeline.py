@@ -480,6 +480,9 @@ class AnalysisPipeline:
             if extract_thumbnail(video.path, thumb_path, timestamp=thumb_time):
                 event.thumbnail_path = str(thumb_path)
 
+            # ---- per-event heatmap -------------------------------------------
+            event.heatmap_path = self._generate_event_heatmap(event.id, seg_samples, width, height)
+
             db.commit()
             report(
                 78.0 + 21.0 * ((idx + 1) / total),
@@ -547,6 +550,33 @@ class AnalysisPipeline:
         if heatmap.save(path):
             return str(path)
         return None
+
+    def _generate_event_heatmap(
+        self, event_id: int, seg_samples: list[FrameSample], width: int, height: int
+    ) -> str | None:
+        """Render a per-event motion heatmap (same JET-colormap style as the
+        whole-video one) from this event's own already-computed ROI boxes.
+
+        Deliberately reuses pass-one's ROI data rather than re-decoding and
+        re-running motion detection over the event's frame range a second
+        time — cheap, and consistent with the per-event object-detection
+        pass already only touching a handful of representative frames
+        rather than every frame in the segment.
+        """
+        if not seg_samples:
+            return None
+        accumulator = HeatmapAccumulator(height=height, width=width)
+        for sample in seg_samples:
+            if not sample.rois:
+                continue
+            mask = np.zeros((height, width), dtype=np.uint8)
+            for x, y, w, h in sample.rois:
+                cv2.rectangle(mask, (x, y), (x + w, y + h), 255, thickness=-1)
+            accumulator.add(mask)
+        if not accumulator.has_data:
+            return None
+        path = self.settings.heatmaps_dir / f"event_{event_id}.png"
+        return str(path) if accumulator.save(path) else None
 
     @staticmethod
     def _peak_time(samples: list[FrameSample]) -> float | None:

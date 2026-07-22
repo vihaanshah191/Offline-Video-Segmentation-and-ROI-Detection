@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Download,
   FileJson,
+  Flame,
   HelpCircle,
   ImageOff,
   Search,
@@ -227,6 +228,13 @@ export function EventTable({ videoId, onSeek }: Props) {
                         >
                           <FileJson className="h-4 w-4" />
                         </Button>
+                        {event.heatmap_url ? (
+                          <Button asChild variant="ghost" size="icon" title="View event heatmap">
+                            <a href={resolveStorageUrl(event.heatmap_url)} target="_blank" rel="noreferrer">
+                              <Flame className="h-4 w-4 text-amber-400" />
+                            </a>
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

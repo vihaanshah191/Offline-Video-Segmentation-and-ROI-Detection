@@ -93,8 +93,10 @@ export interface EventRecord {
   objects: string;
   clip_path: string | null;
   thumbnail_path: string | null;
+  heatmap_path: string | null;
   clip_url: string | null;
   thumbnail_url: string | null;
+  heatmap_url: string | null;
   rois: ROI[];
   detections: Detection[];
   severity: Severity;

@@ -153,6 +153,11 @@ class Event(Base):
 
     clip_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     thumbnail_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # A per-event motion heatmap (same JET-colormap rendering as the
+    # whole-video one, but accumulated only from this event's ROI boxes over
+    # its own time range) — lets an investigator see exactly where within
+    # the frame this specific event's activity was concentrated.
+    heatmap_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
