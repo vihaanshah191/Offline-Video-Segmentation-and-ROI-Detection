@@ -128,6 +128,18 @@ export function useAnalyzeVideo(id: number) {
   });
 }
 
+export function useLoadDemoSample() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: videosApi.loadDemoSample,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      qc.invalidateQueries({ queryKey: queryKeys.globalStats });
+      qc.invalidateQueries({ queryKey: queryKeys.queue });
+    },
+  });
+}
+
 export function useCancelVideo(id: number) {
   const qc = useQueryClient();
   return useMutation({

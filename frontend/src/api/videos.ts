@@ -124,6 +124,11 @@ export const videosApi = {
     return data;
   },
 
+  async loadDemoSample(): Promise<VideoDetail> {
+    const { data } = await apiClient.post<VideoDetail>("/demo/load-sample");
+    return data;
+  },
+
   // Absolute URLs for download/streaming (used in <a href> / <video src>).
   clipDownloadUrl: (videoId: number, eventId: number) =>
     `${API_BASE}/clips/${videoId}/${eventId}/download`,

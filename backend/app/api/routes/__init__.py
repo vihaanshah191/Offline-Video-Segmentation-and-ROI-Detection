@@ -5,6 +5,7 @@ from app.api.routes import (
     analysis,
     auth,
     clips,
+    demo,
     events,
     health,
     heatmap,
@@ -25,5 +26,6 @@ api_router.include_router(heatmap.router)
 api_router.include_router(timeline.router)
 api_router.include_router(reports.router)
 api_router.include_router(settings_routes.router)
+api_router.include_router(demo.router)
 
 __all__ = ["api_router"]

@@ -164,6 +164,9 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------------- demo
     demo_mode_enabled: bool = True
+    # The bundled sample recording used by the one-click "Try demo" flow —
+    # ships in the repo so demo mode works fully offline, no download needed.
+    sample_video_path: Path = REPO_ROOT / "sample_data" / "sample_exam_hall.mp4"
 
     # --------------------------------------------------------------- validators
     @field_validator("default_motion_algorithm")

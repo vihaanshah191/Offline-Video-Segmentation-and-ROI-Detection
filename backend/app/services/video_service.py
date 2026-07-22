@@ -126,6 +126,47 @@ class VideoService:
         )
         return video
 
+    def load_demo_sample(self) -> Video:
+        """Copy the bundled sample recording in as a new video (Demo Mode's
+        one-click flow). Ships in the repo, so this works fully offline.
+
+        Raises:
+            VideoValidationError: If the sample file is missing (e.g. a
+                deployment that stripped ``sample_data/`` from the image).
+        """
+        source = settings.sample_video_path
+        if not source.exists():
+            raise VideoValidationError(
+                f"Bundled sample video not found at {source}. Demo Mode requires "
+                "sample_data/sample_exam_hall.mp4 to be present."
+            )
+
+        stored_name = unique_filename(source.name)
+        dest = settings.videos_dir / stored_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, dest)
+        size = dest.stat().st_size
+
+        meta = probe_metadata(dest)
+        video = Video(
+            filename=stored_name,
+            original_name=f"[Demo] {source.name}",
+            path=str(dest),
+            fps=meta.fps,
+            duration=meta.duration,
+            width=meta.width,
+            height=meta.height,
+            frame_count=meta.frame_count,
+            size_bytes=size,
+            status=VideoStatus.UPLOADED,
+            status_message="Demo sample loaded, awaiting analysis",
+        )
+        self.db.add(video)
+        self.db.commit()
+        self.db.refresh(video)
+        logger.info("Loaded demo sample as video id=%s", video.id)
+        return video
+
     def _write_upload(self, upload: UploadFile, dest: Path) -> int:
         """Stream the upload to disk in chunks and return the byte count."""
         size = 0

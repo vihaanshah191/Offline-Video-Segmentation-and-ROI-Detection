@@ -1,4 +1,5 @@
-import { AlertTriangle, Cpu, HardDrive, Video as VideoIcon, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, Cpu, HardDrive, Loader2, Sparkles, Video as VideoIcon, Zap } from "lucide-react";
 
 import { QueuePanel } from "@/components/QueuePanel";
 import { RecentAnalyses } from "@/components/RecentAnalyses";
@@ -6,25 +7,45 @@ import { StatCard } from "@/components/StatCard";
 import { SystemPanel } from "@/components/SystemPanel";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoUpload } from "@/components/VideoUpload";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useGlobalStats, useSystemInfo, useVideos } from "@/hooks/useVideos";
+import { useGlobalStats, useLoadDemoSample, useSystemInfo, useVideos } from "@/hooks/useVideos";
 import { formatBytes, formatDuration } from "@/lib/utils";
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { data: videoPage, isLoading } = useVideos({ limit: 100 });
   const { data: system } = useSystemInfo();
   const { data: stats } = useGlobalStats();
+  const demo = useLoadDemoSample();
   const videos = videoPage?.items ?? [];
 
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Upload examination-hall recordings for offline motion, ROI and object analysis.
-        </p>
+      <section className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Upload examination-hall recordings for offline motion, ROI and object analysis.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => demo.mutate(undefined, { onSuccess: (video) => navigate(`/videos/${video.id}`) })}
+          disabled={demo.isPending}
+          title="Load the bundled sample video and analyze it automatically"
+        >
+          {demo.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Try demo
+        </Button>
       </section>
+      {demo.isError ? (
+        <p className="text-sm text-destructive">
+          {(demo.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+            "Failed to load the demo sample."}
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Videos" value={stats?.total_videos ?? videos.length} icon={VideoIcon} accent="primary" />

@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
-import { Github, LogOut, ScanEye, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
+import { Github, LogOut, Presentation, ScanEye, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
 
 import { RequireAuth } from "@/components/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { useAuth, AuthProvider } from "@/hooks/useAuth";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { JudgePage } from "@/pages/JudgePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { VideoDetailPage } from "@/pages/VideoDetailPage";
@@ -52,6 +53,13 @@ function Header() {
           </div>
         </Link>
         <div className="flex items-center gap-4">
+          <Link
+            to="/judge"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <Presentation className="h-4 w-4" />
+            <span className="hidden sm:inline">Judge Mode</span>
+          </Link>
           <Link
             to="/settings"
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -106,6 +114,14 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <SettingsPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/judge"
+                  element={
+                    <RequireAuth>
+                      <JudgePage />
                     </RequireAuth>
                   }
                 />
