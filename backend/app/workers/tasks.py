@@ -23,13 +23,29 @@ from app.services.pipeline import AnalysisPipeline, PipelineCancelled, PipelineC
 
 logger = get_logger(__name__)
 
+# Caps how many analyses actually run at once, regardless of how many are
+# queued — batch-uploading N videos (see VideoUpload's multi-file support)
+# and analyzing all of them would otherwise spawn N concurrent full decode +
+# CV threads with no bound, which can exhaust CPU/memory on a single host.
+# A thread blocked on this semaphore leaves its video in 'queued' status
+# (not 'processing') until a slot frees up. Read once at import time from
+# settings, matching how every other startup-time config value behaves.
+_analysis_semaphore = threading.Semaphore(settings.max_concurrent_analyses)
+
 
 def run_analysis(video_id: int, config: PipelineConfig) -> None:
     """Run the full analysis pipeline for ``video_id`` with its own DB session.
 
     This function is safe to call from a thread or a Celery worker. It never
     raises: failures are recorded on the video row so the API can surface them.
+    Blocks (with the video left in 'queued' status) until a concurrency slot
+    is available — see ``settings.max_concurrent_analyses``.
     """
+    with _analysis_semaphore:
+        _run_analysis_locked(video_id, config)
+
+
+def _run_analysis_locked(video_id: int, config: PipelineConfig) -> None:
     db = SessionLocal()
     try:
         video = db.get(Video, video_id)
