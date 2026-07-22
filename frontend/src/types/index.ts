@@ -77,6 +77,8 @@ export interface Detection {
   h: number;
 }
 
+export type Severity = "critical" | "warning" | "normal";
+
 export interface EventRecord {
   id: number;
   video_id: number;
@@ -89,8 +91,11 @@ export interface EventRecord {
   objects: string;
   clip_path: string | null;
   thumbnail_path: string | null;
+  clip_url: string | null;
+  thumbnail_url: string | null;
   rois: ROI[];
   detections: Detection[];
+  severity: Severity;
 }
 
 export interface TimelinePoint {
@@ -106,6 +111,7 @@ export interface EventMarker {
   end: number;
   motion_score: number;
   objects: string[];
+  severity: Severity;
 }
 
 export interface Timeline {
@@ -141,9 +147,14 @@ export interface Analytics {
   peak_activity_time: number;
   longest_event_duration: number;
   longest_event_id: number | null;
+  average_event_duration: number;
+  total_roi_area_pixels: number;
+  top_object: string | null;
   total_detections: number;
   prohibited_detections: number;
   object_counts: ObjectCount[];
+  storage_bytes: number;
+  compression_ratio: number | null;
 }
 
 export interface Clip {
@@ -162,6 +173,18 @@ export interface AnalyzeRequest {
   enable_object_detection: boolean;
   frame_sample_step?: number | null;
   min_motion_area?: number | null;
+  object_detection_confidence?: number | null;
+  object_detection_classes?: string[] | null;
+}
+
+export interface ResourceUsage {
+  cpu_percent: number | null;
+  memory_percent: number | null;
+  memory_used_mb: number | null;
+  memory_total_mb: number | null;
+  gpu_name: string | null;
+  gpu_memory_used_mb: number | null;
+  gpu_memory_total_mb: number | null;
 }
 
 export interface SystemInfo {
@@ -172,6 +195,10 @@ export interface SystemInfo {
   default_motion_algorithm: string;
   free_disk_bytes: number;
   allowed_extensions: string[];
+  yolo_model: string;
+  yolo_device: string;
+  task_backend: string;
+  resources: ResourceUsage;
 }
 
 export interface GlobalStats {
@@ -217,4 +244,35 @@ export interface TokenResponse {
   expires_at: string;
   username: string;
   role: UserRole;
+}
+
+export interface RuntimeConfig {
+  default_motion_algorithm: string;
+  motion_threshold: number;
+  min_motion_area: number;
+  frame_sample_step: number;
+  yolo_confidence: number;
+  enable_object_detection: boolean;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface RuntimeConfigUpdate {
+  default_motion_algorithm?: string;
+  motion_threshold?: number;
+  min_motion_area?: number;
+  frame_sample_step?: number;
+  yolo_confidence?: number;
+  enable_object_detection?: boolean;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  timestamp: string;
+  username: string | null;
+  action: string;
+  resource: string | null;
+  ip_address: string | null;
+  detail: string | null;
+  success: boolean;
 }

@@ -163,7 +163,7 @@ export function VideoDetailPage() {
               onSeek={seekTo}
             />
             {timeline ? (
-              <MotionTimeline timeline={timeline} currentTime={currentTime} onSeek={seekTo} />
+              <MotionTimeline timeline={timeline} currentTime={currentTime} onSeek={seekTo} events={events} />
             ) : null}
           </div>
           <div className="xl:col-span-2">

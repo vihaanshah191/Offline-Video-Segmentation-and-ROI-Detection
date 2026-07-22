@@ -119,6 +119,11 @@ export const videosApi = {
     return data;
   },
 
+  async queue(): Promise<Video[]> {
+    const { data } = await apiClient.get<Video[]>("/queue");
+    return data;
+  },
+
   // Absolute URLs for download/streaming (used in <a href> / <video src>).
   clipDownloadUrl: (videoId: number, eventId: number) =>
     `${API_BASE}/clips/${videoId}/${eventId}/download`,

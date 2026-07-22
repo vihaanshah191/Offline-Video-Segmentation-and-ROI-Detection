@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.config import settings
+from app.utils.files import to_relative_url
 from app.utils.severity import compute_severity
 
 
@@ -59,6 +61,8 @@ class EventRead(BaseModel):
     objects: str
     clip_path: str | None
     thumbnail_path: str | None
+    clip_url: str | None = None
+    thumbnail_url: str | None = None
     rois: list[ROIRead] = []
     detections: list[DetectionRead] = []
     severity: str = Field(
@@ -71,6 +75,8 @@ class EventRead(BaseModel):
         return [o for o in self.objects.split(",") if o]
 
     @model_validator(mode="after")
-    def _compute_severity(self) -> "EventRead":
+    def _compute_derived_fields(self) -> "EventRead":
         self.severity = compute_severity(self.peak_motion_score, self.detections)
+        self.clip_url = to_relative_url(self.clip_path, settings.storage_dir)
+        self.thumbnail_url = to_relative_url(self.thumbnail_path, settings.storage_dir)
         return self

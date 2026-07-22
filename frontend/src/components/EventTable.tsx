@@ -1,11 +1,23 @@
 import { useState } from "react";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Download, HelpCircle, Search, ShieldAlert } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileJson,
+  HelpCircle,
+  ImageOff,
+  Search,
+  ShieldAlert,
+} from "lucide-react";
 
+import { resolveStorageUrl } from "@/api/client";
 import { videosApi, type EventQuery } from "@/api/videos";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SeverityBadge } from "@/components/SeverityBadge";
 import {
   Table,
   TableBody,
@@ -16,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { useEvents } from "@/hooks/useVideos";
 import { cn, formatDuration, formatTimestamp } from "@/lib/utils";
+import type { EventRecord } from "@/types";
 
 type SortField = NonNullable<EventQuery["sort_by"]>;
 const PAGE_SIZE = 25;
@@ -44,6 +57,16 @@ export function EventTable({ videoId, onSeek }: Props) {
   const events = data?.items ?? [];
   const total = data?.pageInfo.total ?? 0;
   const hasNextPage = (page + 1) * PAGE_SIZE < total;
+
+  const exportEvent = (event: EventRecord) => {
+    const blob = new Blob([JSON.stringify(event, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `video${videoId}_event${event.id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const toggleSort = (field: SortField) => {
     setPage(0);
@@ -97,25 +120,28 @@ export function EventTable({ videoId, onSeek }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Thumb</TableHead>
               <TableHead>ID</TableHead>
               <SortHead label="Start" field="start_time" sortBy={sortBy} order={order} onSort={toggleSort} />
               <SortHead label="Duration" field="duration" sortBy={sortBy} order={order} onSort={toggleSort} />
               <SortHead label="Motion" field="motion_score" sortBy={sortBy} order={order} onSort={toggleSort} />
               <SortHead label="Confidence" field="confidence" sortBy={sortBy} order={order} onSort={toggleSort} />
+              <TableHead>Severity</TableHead>
               <TableHead>Objects</TableHead>
               <TableHead>ROIs</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                   Loading events…
                 </TableCell>
               </TableRow>
             ) : events.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                   No events match your filters.
                 </TableCell>
               </TableRow>
@@ -128,12 +154,26 @@ export function EventTable({ videoId, onSeek }: Props) {
                 const prohibitedLabels = new Set(
                   event.detections.filter((d) => d.prohibited).map((d) => d.label),
                 );
+                const thumbUrl = resolveStorageUrl(event.thumbnail_url);
                 return (
                   <TableRow
                     key={event.id}
                     className="cursor-pointer"
                     onClick={() => onSeek(event.start_time)}
                   >
+                    <TableCell>
+                      {thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt={`Event #${event.id} thumbnail`}
+                          className="h-10 w-14 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-14 items-center justify-center rounded bg-muted">
+                          <ImageOff className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-xs">#{event.id}</TableCell>
                     <TableCell className="font-mono text-xs">{formatTimestamp(event.start_time)}</TableCell>
                     <TableCell>{formatDuration(event.duration)}</TableCell>
@@ -141,6 +181,9 @@ export function EventTable({ videoId, onSeek }: Props) {
                       <MotionBar value={event.motion_score} />
                     </TableCell>
                     <TableCell>{(event.confidence * 100).toFixed(0)}%</TableCell>
+                    <TableCell>
+                      <SeverityBadge severity={event.severity} />
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {objects.length === 0 ? (
@@ -167,6 +210,25 @@ export function EventTable({ videoId, onSeek }: Props) {
                       </div>
                     </TableCell>
                     <TableCell>{event.rois.length}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        {event.clip_url ? (
+                          <Button asChild variant="ghost" size="icon" title="Download clip">
+                            <a href={videosApi.clipDownloadUrl(videoId, event.id)} download>
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Export event as JSON"
+                          onClick={() => exportEvent(event)}
+                        >
+                          <FileJson className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })

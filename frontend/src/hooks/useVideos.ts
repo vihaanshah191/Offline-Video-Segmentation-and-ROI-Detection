@@ -29,6 +29,7 @@ export const queryKeys = {
   heatmap: (id: number) => ["heatmap", id] as const,
   system: ["system"] as const,
   globalStats: ["globalStats"] as const,
+  queue: ["queue"] as const,
 };
 
 const ACTIVE = new Set(["queued", "processing"]);
@@ -52,7 +53,19 @@ export function useVideo(id: number): UseQueryResult<VideoDetail> {
 }
 
 export function useSystemInfo(): UseQueryResult<SystemInfo> {
-  return useQuery({ queryKey: queryKeys.system, queryFn: videosApi.system, staleTime: 60_000 });
+  return useQuery({
+    queryKey: queryKeys.system,
+    queryFn: videosApi.system,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useQueue(): UseQueryResult<Video[]> {
+  return useQuery({
+    queryKey: queryKeys.queue,
+    queryFn: videosApi.queue,
+    refetchInterval: 3000,
+  });
 }
 
 export function useGlobalStats(): UseQueryResult<GlobalStats> {
