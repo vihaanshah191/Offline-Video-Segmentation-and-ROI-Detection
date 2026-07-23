@@ -24,39 +24,42 @@ export function VideoUpload() {
   const [dragging, setDragging] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const processingRef = useRef(false);
+  // Items waiting to be uploaded. A second `handleFiles` call while a batch
+  // is already uploading pushes here instead of starting a second worker —
+  // the running loop below drains this on every iteration, so newly dropped
+  // files are picked up rather than silently stuck at "pending" forever.
+  const pendingRef = useRef<QueueItem[]>([]);
 
-  const processQueue = useCallback(
-    async (items: QueueItem[]) => {
-      if (processingRef.current) return;
-      processingRef.current = true;
-      for (const item of items) {
-        setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "uploading" } : x)));
-        try {
-          await new Promise<void>((resolve, reject) => {
-            upload.mutate(
-              {
-                file: item.file,
-                onProgress: (pct) =>
-                  setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, progress: pct } : x))),
-              },
-              {
-                onSuccess: () => resolve(),
-                onError: (err: unknown) => reject(err),
-              },
-            );
-          });
-          setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "done", progress: 100 } : x)));
-        } catch (err) {
-          const message =
-            (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-            "Upload failed";
-          setQueue((q) => (q.map((x) => (x.id === item.id ? { ...x, status: "error", error: message } : x))));
-        }
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    while (pendingRef.current.length > 0) {
+      const item = pendingRef.current.shift()!;
+      setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "uploading" } : x)));
+      try {
+        await new Promise<void>((resolve, reject) => {
+          upload.mutate(
+            {
+              file: item.file,
+              onProgress: (pct) =>
+                setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, progress: pct } : x))),
+            },
+            {
+              onSuccess: () => resolve(),
+              onError: (err: unknown) => reject(err),
+            },
+          );
+        });
+        setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "done", progress: 100 } : x)));
+      } catch (err) {
+        const message =
+          (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          "Upload failed";
+        setQueue((q) => (q.map((x) => (x.id === item.id ? { ...x, status: "error", error: message } : x))));
       }
-      processingRef.current = false;
-    },
-    [upload],
-  );
+    }
+    processingRef.current = false;
+  }, [upload]);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -68,7 +71,8 @@ export function VideoUpload() {
         status: "pending",
       }));
       setQueue((q) => [...q, ...items]);
-      void processQueue(items);
+      pendingRef.current.push(...items);
+      void processQueue();
     },
     [processQueue],
   );

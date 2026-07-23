@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.models.video import Video, VideoStatus
-from app.services.pipeline import AnalysisPipeline, PipelineConfig
+from app.services.pipeline import AnalysisPipeline, PipelineConfig, _FrameReaderThread
 from app.utils.video_io import probe_metadata
 
 
@@ -29,6 +29,23 @@ def test_pipeline_config_survives_celery_style_serialization() -> None:
     assert isinstance(as_dict, dict)
     reconstructed = PipelineConfig(**as_dict)
     assert reconstructed == original
+
+
+def test_frame_reader_thread_stop_unblocks_a_full_queue(sample_video_path: Path) -> None:
+    """Regression test: a reader thread abandoned mid-stream (cancellation or
+    a fatal corrupt-frame abort) used to stay blocked forever on a full
+    queue's ``put()`` — leaking the thread and its open VideoCapture for the
+    rest of the process's life, since nothing ever calls ``.get()`` again.
+
+    A queue_size of 1 with no consumer reproduces that "queue stays full,
+    producer stays blocked" state almost immediately. Without ``stop()``
+    unblocking the producer's ``put()``, ``join()`` would time out and the
+    thread would still be alive.
+    """
+    reader = _FrameReaderThread(str(sample_video_path), step=1, queue_size=1).start()
+    reader.stop()
+    reader.join(timeout=2.0)
+    assert not reader._thread.is_alive()
 
 
 def _register_video(db_session, sample_video_path: Path) -> Video:

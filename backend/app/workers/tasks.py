@@ -101,6 +101,12 @@ def _run_analysis_locked(video_id: int, config: PipelineConfig) -> None:
                 # and an oversized value should never itself cause a second
                 # failure while we're already in the process of recording one.
                 video.error = str(exc)[:4000]
+                # A cancel request racing with an unrelated failure must not
+                # survive onto the next run of this video: if left True, the
+                # next re-analysis's very first cancellation checkpoint would
+                # immediately abort it as "cancelled" even though the user
+                # never cancelled that run.
+                video.cancel_requested = False
                 db.commit()
         except Exception:  # noqa: BLE001 - never let error *reporting* itself crash the thread
             # If the database is unreachable even for this final write, there

@@ -131,6 +131,11 @@ def cut_clip(
     """
     start = max(0.0, start)
     duration = max(0.1, end - start)
+    # Apply the floor to `end` itself too, not just to the ffmpeg `-t`
+    # argument below — otherwise a degenerate end <= start would still
+    # reach the OpenCV fallback unclamped and produce a silently
+    # "successful" zero-frame clip.
+    end = start + duration
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     if ffmpeg_available():

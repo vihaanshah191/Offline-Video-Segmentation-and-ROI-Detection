@@ -293,6 +293,12 @@ class VideoService:
                     progress=0.0,
                     status_message="Queued for analysis",
                     error=None,
+                    # A stale True here (e.g. left over from a cancel request
+                    # that raced with an unrelated failure on a previous run)
+                    # would make this brand-new run's first cancellation
+                    # checkpoint immediately abort it — every requeue must
+                    # start with a clean flag.
+                    cancel_requested=False,
                 )
             ),
         )

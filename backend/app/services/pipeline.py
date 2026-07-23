@@ -139,11 +139,26 @@ class _FrameReaderThread:
         self.frame_queue: queue.Queue = queue.Queue(maxsize=max(1, queue_size))
         self.error: Exception | None = None
         self.frames_decoded = 0
+        self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, name="frame-reader", daemon=True)
 
     def start(self) -> _FrameReaderThread:
         self._thread.start()
         return self
+
+    def stop(self) -> None:
+        """Signal the producer to stop and unblock a pending queue ``put``.
+
+        The consumer (``frames()``) is a generator abandoned mid-iteration
+        whenever the pipeline exits its frame loop early (cancellation, or
+        the too-many-corrupt-frames abort) — nothing calls ``.get()`` on the
+        queue again. Without this, a producer blocked on ``put()`` (the
+        common case: CV processing is normally slower than raw decode, so
+        the bounded queue is usually full) would stay blocked for the rest
+        of the process's life, leaking this thread and its open
+        ``VideoCapture``. Call before ``join()`` on every exit path.
+        """
+        self._stop_event.set()
 
     def _run(self) -> None:
         cap = cv2.VideoCapture(self.video_path)
@@ -152,19 +167,32 @@ class _FrameReaderThread:
                 self.error = ValueError(f"Cannot open video for analysis: {self.video_path}")
                 return
             frame_index = 0
-            while True:
+            while not self._stop_event.is_set():
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     break
                 self.frames_decoded += 1
-                if frame_index % self.step == 0:
-                    self.frame_queue.put((frame_index, frame))
+                if frame_index % self.step == 0 and not self._put_until_stopped((frame_index, frame)):
+                    break
                 frame_index += 1
         except Exception as exc:  # noqa: BLE001 - surfaced to the consumer thread
             self.error = exc
         finally:
             cap.release()
-            self.frame_queue.put(self._SENTINEL)
+            self._put_until_stopped(self._SENTINEL)
+
+    def _put_until_stopped(self, item: object) -> bool:
+        """Block on ``frame_queue.put`` but wake periodically to re-check ``_stop_event``.
+
+        Returns False if ``stop()`` was called before the item could be enqueued.
+        """
+        while not self._stop_event.is_set():
+            try:
+                self.frame_queue.put(item, timeout=0.5)
+                return True
+            except queue.Full:
+                continue
+        return False
 
     def frames(self):
         """Yield ``(frame_index, frame)`` tuples until the reader is exhausted.
@@ -315,6 +343,10 @@ class AnalysisPipeline:
                             pct = 2.0 + 68.0 * (frame_index / max(1, total_frames))
                             report(min(70.0, pct), "Analysing motion")
             finally:
+                # stop() unblocks a reader still stuck in put() when this
+                # loop was abandoned early (cancellation / corrupt-frame
+                # abort); harmless no-op if the reader already finished.
+                reader.stop()
                 reader.join()
         motion_timer_stats = {
             "elapsed_seconds": round(motion_timer.elapsed_seconds, 3),

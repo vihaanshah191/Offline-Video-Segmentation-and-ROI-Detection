@@ -74,7 +74,10 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, Props>(function VideoPla
     el.pause();
     const next = Math.max(0, el.currentTime + direction * frameDuration);
     el.currentTime = next;
-    onSeek(next);
+    // Use onTimeUpdate (plain state sync), not onSeek — onSeek resumes
+    // playback, which would immediately undo the pause() above and make
+    // frame-by-frame stepping impossible to hold on a single frame.
+    onTimeUpdate(next);
   };
 
   const sortedEvents = useMemo(() => [...events].sort((a, b) => a.start_time - b.start_time), [events]);

@@ -62,6 +62,20 @@ def test_request_cancel_no_op_when_not_running(db_session, status) -> None:
     assert video.cancel_requested is False
 
 
+def test_try_mark_queued_resets_stale_cancel_flag(db_session) -> None:
+    """Regression test: a video whose previous run failed for an unrelated
+    reason while a cancel request happened to be in flight could be left
+    with cancel_requested=True in the DB (the generic failure handler used
+    to only set status/error, not clear the flag). Without this reset, the
+    very next re-analysis's first cancellation checkpoint would immediately
+    abort it as "cancelled" even though the user never cancelled that run."""
+    video = _make_video(db_session, status=VideoStatus.FAILED, cancel_requested=True)
+    service = VideoService(db_session)
+
+    assert service.try_mark_queued(video) is True
+    assert video.cancel_requested is False
+
+
 def test_pipeline_check_cancelled_raises_when_flagged(db_session) -> None:
     from app.services.pipeline import AnalysisPipeline
 
