@@ -317,10 +317,10 @@ def select_best_algorithm(
                 break
             if frame_index % sample_stride == 0:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                brightness_samples.append(float(np.mean(gray)))
+                brightness_samples.append(float(np.mean(gray.astype(np.uint8))))
                 if prev_gray is not None:
                     delta = cv2.absdiff(prev_gray, gray)
-                    noise_samples.append(float(np.median(delta)))
+                    noise_samples.append(float(np.median(delta.astype(np.uint8))))
                 prev_gray = gray
                 collected += 1
             frame_index += 1
